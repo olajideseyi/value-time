@@ -15,3 +15,5 @@
 .pwa-installed{background:#eaf7f0;color:#21835b;box-shadow:none}
 .settings-form input[type=range]{width:100%;accent-color:#3567d6}
 @media(max-width:650px){.pwa-install,.pwa-installed{right:14px;bottom:14px}}
+
+.weekday-picker{display:flex;flex-wrap:wrap;gap:8px}.weekday-picker label{display:flex;align-items:center;gap:6px;border:1px solid #e3e9f0;border-radius:7px;padding:8px 10px;background:#fff;color:#53627a;font-size:10px;font-weight:700}.weekday-picker input{width:14px;height:14px;accent-color:#3567d6}
