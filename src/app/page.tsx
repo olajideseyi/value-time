@@ -112,13 +112,13 @@ export default function Home() {
         <span className="eyebrow muted">WELCOME TO VALUE TIME</span>
         <h2>{authMode === "signin" ? "Good to have you back." : "Create your workspace."}</h2>
         <p className="auth-subtitle">{authMode === "signin" ? "Sign in to pick up where you left off." : "A little more organised starts right here."}</p>
-        {!isSupabaseConfigured && <div className="config-note"><CircleHelp size={17}/> <span><strong>We’re getting your workspace ready.</strong><br/>Account access will be available shortly. Please check back soon.</span></div>}
+        {!isSupabaseConfigured && <div className="config-note"><CircleHelp size={17}/> <span><strong>Account access is temporarily unavailable.</strong><br/>Please try again shortly. Your information has not been lost.</span></div>}
         <form onSubmit={authenticate} className="auth-form">
           {authMode === "signup" && <label>Full name<input value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Your name" required/></label>}
           <label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required/></label>
           <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" minLength={8} autoComplete={authMode==="signin"?"current-password":"new-password"} required/></label>
           {authMode === "signin" && <button type="button" className="forgot-password" onClick={async()=>{if(!supabase||!email){setAuthError("Enter your email address first.");return;}const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});setAuthError(error?.message||"If an account exists for this email, a password reset link has been sent.");}}>Forgot password?</button>}{authError && <p className="form-error">{authError}</p>}{notice && <p className="form-success">{notice}</p>}
-          <button className="primary-button full-button" disabled={busy || !isSupabaseConfigured}>{!isSupabaseConfigured ? "Coming soon" : busy ? "Please wait…" : authMode==="signin" ? "Sign in" : "Create account"}<ArrowRight size={17}/></button>
+          <button className="primary-button full-button" disabled={busy || !isSupabaseConfigured}>{!isSupabaseConfigured ? "Temporarily unavailable" : busy ? "Please wait…" : authMode==="signin" ? "Sign in" : "Create account"}<ArrowRight size={17}/></button>
         </form>
         <p className="auth-switch">{authMode==="signin" ? "New to Value Time?" : "Already have an account?"} <button onClick={()=>{setAuthMode(authMode==="signin"?"signup":"signin");setAuthError("");setNotice("");}}>{authMode==="signin"?"Create an account":"Sign in"}</button></p>
         <p className="privacy-note">Your workspace is private. Your activities and personal information are visible only to you.</p>
