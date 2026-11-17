@@ -16,7 +16,7 @@ async function processReminders(env:Env){
   let status:"sent"|"failed"="failed";let providerId:string|null=null;let errorMessage:string|null=null;
   try{
    if(reminder.channel==="email"){
-    const ur=await fetch(base+"/auth/v1/admin/users/"+reminder.user_id,{headers});if(!ur.ok)throw new Error("Could not retrieve account email.");const user=await ur.json() as {email?:string};if(!user.email)throw new Error("No email address is registered for this account.");
+    const prefUrl=new URL(base+"/rest/v1/user_preferences");prefUrl.searchParams.set("select","email_notifications_enabled");prefUrl.searchParams.set("user_id","eq."+reminder.user_id);const prefResponse=await fetch(prefUrl,{headers});const prefRows=await prefResponse.json() as {email_notifications_enabled:boolean}[];if(prefRows[0]?.email_notifications_enabled===false)throw new Error("Email reminders are disabled in account preferences.");const ur=await fetch(base+"/auth/v1/admin/users/"+reminder.user_id,{headers});if(!ur.ok)throw new Error("Could not retrieve account email.");const user=await ur.json() as {email?:string};if(!user.email)throw new Error("No email address is registered for this account.");
     const esc=(s:string)=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]!));
     const body=esc(reminder.message||"Your scheduled reminder is due.").replace(/\\n/g,"<br/>");
     const html="<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;color:#17243a\"><p style=\"color:#3567d6;font-weight:bold;letter-spacing:2px\">VALUE TIME</p><h1>"+esc(reminder.title)+"</h1><p style=\"line-height:1.7;color:#52627a\">"+body+"</p><p style=\"margin-top:32px;color:#8793a5;font-size:12px\">A reminder from your Value Time workspace.</p></div>";
