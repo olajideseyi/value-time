@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  AlarmClock, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown,
+  AlarmClock, ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown,
   CircleHelp, ClipboardList, Clock3, Command, LayoutDashboard, LogOut, Menu,
   Plus, Send, Settings2, Sparkles, Target, TrendingUp, X
 } from "lucide-react";
@@ -133,6 +133,8 @@ export default function Home() {
       <nav className="side-nav">
         <a className="nav-link active" href="#"><LayoutDashboard size={18}/> Overview</a>
         <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
+        <a className="nav-link" href="/courses"><BookOpen size={18}/> Courses</a>
+        <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
         <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
         <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
         <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
