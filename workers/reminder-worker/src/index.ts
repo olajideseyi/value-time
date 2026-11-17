@@ -70,7 +70,7 @@ async function processDailySummaries(env:Env){
 }
 async function fetchRows(base:string,table:string,headers:Record<string,string>,userId:string,from:string,to:string){
  const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("created_at","gte."+from);url.searchParams.set("limit","100");
- if(table==="schedule_entries"){url.searchParams.delete("created_at");url.searchParams.set("starts_at","gte."+from);url.searchParams.set("starts_at","lte."+to);}
+ if(table==="schedule_entries"){url.searchParams.set("is_active","eq.true");}
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
