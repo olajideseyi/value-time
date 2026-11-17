@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { InstallAppButton, ReminderEngine } from "@/components/app-capabilities";
 
 export const metadata: Metadata = {
   title: "Value Time — Make every moment count",
@@ -12,5 +13,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><ReminderEngine />{children}<InstallAppButton /></body></html>;
 }
