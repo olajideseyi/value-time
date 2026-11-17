@@ -1,0 +1,1 @@
+alter table public.courses add column if not exists progress_percent integer not null default 0 check (progress_percent between 0 and 100);
