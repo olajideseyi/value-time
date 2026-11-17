@@ -57,10 +57,10 @@ async function processDailySummaries(env:Env){
    p.summary_include_tasks?fetchRows(base,"tasks",{...headers},p.user_id,from,to):Promise.resolve([]),
    p.summary_include_assignments?fetchRows(base,"assignments",{...headers},p.user_id,from,to):Promise.resolve([])
   ]);
-  const today=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))===day;
+  const today=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))===day;const localWeekday=(value:string)=>new Intl.DateTimeFormat("en-US",{timeZone:tz,weekday:"short"}).format(new Date(value));const weekdayNumber=(short:string)=>({Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6} as Record<string,number>)[short]??-1;
   const sections:string[]=[];
   const list=(title:string,items:any[],render:(x:any)=>string)=>{const rows=items.map(render);sections.push("<h2 style='font-size:16px;margin:26px 0 10px'>"+title+"</h2>"+(rows.length?rows.join(""):"<p style='color:#8793a5'>Nothing scheduled.</p>"));};
-  if(p.summary_include_timetable)list("Today's timetable",schedule.filter((x:any)=>x.is_active&&((x.recurrence_type==="weekly"&&x.recurrence_days?.includes(new Date(x.starts_at).getDay()))||today(x.starts_at))),x=>"<p style='padding:10px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b><br><span style='color:#64748b'>"+new Intl.DateTimeFormat("en-NG",{timeZone:tz,hour:"2-digit",minute:"2-digit"}).format(new Date(x.starts_at))+" · "+esc(x.location||"Location not set")+"</span></p>");
+  if(p.summary_include_timetable)list("Today's timetable",schedule.filter((x:any)=>x.is_active&&((x.recurrence_type==="weekly"&&x.recurrence_days?.includes(weekdayNumber(localWeekday(x.starts_at))))||today(x.starts_at))),x=>"<p style='padding:10px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b><br><span style='color:#64748b'>"+new Intl.DateTimeFormat("en-NG",{timeZone:tz,hour:"2-digit",minute:"2-digit"}).format(new Date(x.starts_at))+" · "+esc(x.location||"Location not set")+"</span></p>");
   if(p.summary_include_tasks)list("Tasks to keep moving",tasks.filter((x:any)=>x.status!=="completed"&&(!x.due_at||today(x.due_at))),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'>"+esc(x.title)+"</p>");
   if(p.summary_include_assignments)list("Assignments due",assignments.filter((x:any)=>x.status!=="completed"&&x.due_at&&today(x.due_at)),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b> · "+esc(x.priority)+"</p>");
   let status:"sent"|"failed"="failed",providerId:string|null=null,errorMessage:string|null=null;
@@ -71,7 +71,7 @@ async function processDailySummaries(env:Env){
 async function fetchRows(base:string,table:string,headers:Record<string,string>,userId:string,from:string,to:string){
  const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("created_at","gte."+from);url.searchParams.set("limit","100");
  if(table==="schedule_entries"){url.searchParams.delete("created_at");url.searchParams.set("starts_at","gte."+from);url.searchParams.set("starts_at","lte."+to);}
- else{url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}
+ else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
 \nexport default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
