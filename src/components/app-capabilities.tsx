@@ -8,8 +8,7 @@ export function InstallAppButton(){
  const [prompt,setPrompt]=useState<any>(null);const [installed,setInstalled]=useState(false);
  useEffect(()=>{const before=(e:Event)=>{e.preventDefault();setPrompt(e);};const done=()=>{setInstalled(true);setPrompt(null);};window.addEventListener("beforeinstallprompt",before);window.addEventListener("appinstalled",done);if(window.matchMedia("(display-mode: standalone)").matches)setInstalled(true);return()=>{window.removeEventListener("beforeinstallprompt",before);window.removeEventListener("appinstalled",done);};},[]);
  if(installed)return <span className="pwa-installed"><Check size={14}/> App installed</span>;
- if(!prompt)return null;
- return <button className="pwa-install" onClick={async()=>{await prompt.prompt();const result=await prompt.userChoice;if(result?.outcome==="accepted")setInstalled(true);setPrompt(null);}}><Download size={15}/> Install app</button>;
+ return <button className="pwa-install" onClick={async()=>{if(!prompt){const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);alert(ios?"To add Value Time to your Home Screen, open this page in Safari, tap Share, then choose Add to Home Screen.":"Open your browser menu and choose Install app or Add to Home screen. If that option is unavailable, check that you are using the latest browser over HTTPS.");return;}await prompt.prompt();const result=await prompt.userChoice;if(result?.outcome==="accepted")setInstalled(true);setPrompt(null);}}><Download size={15}/> Install app</button>;
 }
 export function ReminderEngine(){
  const audio=useRef<AudioContext|null>(null);const fired=useRef<Set<string>>(new Set());
