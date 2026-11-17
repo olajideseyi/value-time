@@ -11,7 +11,7 @@ export function InstallAppButton(){
  return <button className="pwa-install" onClick={async()=>{if(!prompt){const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);alert(ios?"To add Value Time to your Home Screen, open this page in Safari, tap Share, then choose Add to Home Screen.":"Open your browser menu and choose Install app or Add to Home screen. If that option is unavailable, check that you are using the latest browser over HTTPS.");return;}await prompt.prompt();const result=await prompt.userChoice;if(result?.outcome==="accepted")setInstalled(true);setPrompt(null);}}><Download size={15}/> Install app</button>;
 }
 export function ReminderEngine(){
- const audio=useRef<AudioContext|null>(null);const fired=useRef<Set<string>>(new Set());
+ const audio=useRef<AudioContext|null>(null);const fired=useRef<Map<string,string>>(new Map());
  useEffect(()=>{
   if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
   const unlock=async()=>{try{const C=window.AudioContext||(window as any).webkitAudioContext;if(!C)return;if(!audio.current)audio.current=new C();if(audio.current.state==="suspended")await audio.current.resume();}catch{}};
@@ -27,10 +27,10 @@ export function ReminderEngine(){
    if(!live||reminders.error)return;
    const settings:any=prefs.data||{};
    for(const reminder of reminders.data||[]){
-    if(fired.current.has(reminder.id))continue;
+    if(fired.current.get(reminder.id)===reminder.due_at)continue;
     const delay=Math.max(0,new Date(reminder.due_at).getTime()-Date.now());if(delay>2147480000)continue;
     timers.push(setTimeout(async()=>{
-     if(!live||fired.current.has(reminder.id))return;fired.current.add(reminder.id);
+     if(!live||fired.current.get(reminder.id)===reminder.due_at)return;fired.current.set(reminder.id,reminder.due_at);
      const body=reminder.message||"Your scheduled reminder is due.";
      if(settings.push_enabled&&"Notification"in window&&Notification.permission==="granted"){
       try{if("serviceWorker"in navigator){const reg=await navigator.serviceWorker.ready;await reg.showNotification(reminder.title,{body,tag:reminder.id,icon:"/icon.svg",badge:"/icon.svg"});}else new Notification(reminder.title,{body});}catch{}
