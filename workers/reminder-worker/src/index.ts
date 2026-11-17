@@ -76,4 +76,4 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-\nexport default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+export default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
