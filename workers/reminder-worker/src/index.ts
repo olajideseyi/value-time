@@ -1,4 +1,6 @@
 export interface Env { SUPABASE_URL:string; SUPABASE_SERVICE_ROLE_KEY:string; TELEGRAM_BOT_TOKEN?:string; RESEND_API_KEY?:string; EMAIL_FROM?:string; }
+interface WorkerScheduledController { cron:string; scheduledTime:number; }
+interface WorkerExecutionContext { waitUntil(promise:Promise<unknown>):void; passThroughOnException():void; }
 type DueReminder={id:string;user_id:string;title:string;message:string|null;attempts:number;channel:"telegram"|"email"};
 type TelegramConnection={telegram_chat_id:string|null;notifications_enabled:boolean};
 async function sendEmail(env:Env,to:string,subject:string,html:string){
@@ -76,4 +78,4 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-export default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
