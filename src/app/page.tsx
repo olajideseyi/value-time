@@ -20,6 +20,7 @@ export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -37,7 +38,7 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return; }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => { setSession(next); if (event === "PASSWORD_RECOVERY") setRecoveryMode(true); });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -91,6 +92,8 @@ export default function Home() {
   }
 
   if (authLoading) return <main className="loading-screen"><div className="loader-mark"><Clock3 size={25}/></div><span>Preparing your workspace…</span></main>;
+
+  if (session && recoveryMode) return <main className="auth-page"><section className="auth-panel"><div className="auth-form-wrap"><span className="eyebrow muted">SECURE YOUR ACCOUNT</span><h2>Choose a new password.</h2><p className="auth-subtitle">Use a password you have not used before.</p><form className="auth-form" onSubmit={async(e)=>{e.preventDefault();if(!supabase)return;setBusy(true);const {error}=await supabase.auth.updateUser({password});setAuthError(error?.message||"Your password has been updated. You can continue to your workspace.");if(!error)setRecoveryMode(false);setBusy(false);}}><label>New password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required placeholder="At least 8 characters"/></label>{authError&&<p className="form-error">{authError}</p>}<button className="primary-button full-button" disabled={busy}>{busy?"Updating…":"Update password"}<ArrowRight size={17}/></button></form></div></section></main>;
 
   if (!session) return <main className="auth-page">
     <section className="auth-visual">
