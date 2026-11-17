@@ -7,7 +7,7 @@ async function sendEmail(env:Env,to:string,subject:string,html:string){
  const data=await r.json() as {id?:string;message?:string};if(!r.ok)throw new Error(data.message||"Resend email failed with HTTP "+r.status);return data.id||null;
 }
 async function processReminders(env:Env){
- const base=env.SUPABASE_URL.replace(/\\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
+ const base=env.SUPABASE_URL.replace(/\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(telegram,email)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
  const response=await fetch(q,{headers});if(!response.ok)throw new Error("Supabase reminder query failed: "+response.status+" "+await response.text());const reminders=await response.json() as DueReminder[];
  for(const reminder of reminders){
@@ -18,12 +18,12 @@ async function processReminders(env:Env){
    if(reminder.channel==="email"){
     const prefUrl=new URL(base+"/rest/v1/user_preferences");prefUrl.searchParams.set("select","email_notifications_enabled");prefUrl.searchParams.set("user_id","eq."+reminder.user_id);const prefResponse=await fetch(prefUrl,{headers});const prefRows=await prefResponse.json() as {email_notifications_enabled:boolean}[];if(prefRows[0]?.email_notifications_enabled===false)throw new Error("Email reminders are disabled in account preferences.");const ur=await fetch(base+"/auth/v1/admin/users/"+reminder.user_id,{headers});if(!ur.ok)throw new Error("Could not retrieve account email.");const user=await ur.json() as {email?:string};if(!user.email)throw new Error("No email address is registered for this account.");
     const esc=(s:string)=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]!));
-    const body=esc(reminder.message||"Your scheduled reminder is due.").replace(/\\n/g,"<br/>");
+    const body=esc(reminder.message||"Your scheduled reminder is due.").replace(/\n/g,"<br/>");
     const html="<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;color:#17243a\"><p style=\"color:#3567d6;font-weight:bold;letter-spacing:2px\">VALUE TIME</p><h1>"+esc(reminder.title)+"</h1><p style=\"line-height:1.7;color:#52627a\">"+body+"</p><p style=\"margin-top:32px;color:#8793a5;font-size:12px\">A reminder from your Value Time workspace.</p></div>";
     providerId=await sendEmail(env,user.email,"Value Time reminder: "+reminder.title,html);
    }else{
     if(!env.TELEGRAM_BOT_TOKEN)throw new Error("Telegram delivery is not configured.");const cq=new URL(base+"/rest/v1/telegram_connections");cq.searchParams.set("select","telegram_chat_id,notifications_enabled");cq.searchParams.set("user_id","eq."+reminder.user_id);const cr=await fetch(cq,{headers});if(!cr.ok)throw new Error("Telegram connection lookup failed.");const conns=await cr.json() as TelegramConnection[];const c=conns[0];if(!c?.telegram_chat_id||!c.notifications_enabled)throw new Error("No connected Telegram chat or notifications disabled.");
-    const tr=await fetch("https://api.telegram.org/bot"+env.TELEGRAM_BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:c.telegram_chat_id,text:"🔔 "+reminder.title+"\\n\\n"+(reminder.message||"Your scheduled reminder is due."),disable_web_page_preview:true})});const td=await tr.json() as {ok?:boolean;description?:string;result?:{message_id?:number}};if(!tr.ok||!td.ok)throw new Error(td.description||"Telegram returned HTTP "+tr.status);providerId=String(td.result?.message_id??"");
+    const tr=await fetch("https://api.telegram.org/bot"+env.TELEGRAM_BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:c.telegram_chat_id,text:"🔔 "+reminder.title+"\n\n"+(reminder.message||"Your scheduled reminder is due."),disable_web_page_preview:true})});const td=await tr.json() as {ok?:boolean;description?:string;result?:{message_id?:number}};if(!tr.ok||!td.ok)throw new Error(td.description||"Telegram returned HTTP "+tr.status);providerId=String(td.result?.message_id??"");
    }status="sent";
   }catch(e){errorMessage=e instanceof Error?e.message:"Notification delivery failed.";}
   await fetch(claimUrl,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({status,sent_at:status==="sent"?new Date().toISOString():null,last_error:errorMessage})});
@@ -69,7 +69,7 @@ async function processDailySummaries(env:Env){
  }
 }
 async function fetchRows(base:string,table:string,headers:Record<string,string>,userId:string,from:string,to:string){
- const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("created_at","gte."+from);url.searchParams.set("limit","100");
+ const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("limit","100");
  if(table==="schedule_entries"){url.searchParams.set("is_active","eq.true");}
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
