@@ -42,7 +42,7 @@ export function ReminderEngine(){
       const rounds=settings.alarm_repeat===false?1:3;
       for(let n=0;n<rounds;n++)tones.forEach((hz,i)=>{const t=ctx.currentTime+n*.85+i*.17;const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type="sine";osc.frequency.value=hz;gain.gain.setValueAtTime(.001,t);gain.gain.linearRampToValueAtTime(vol*.2,t+.025);gain.gain.exponentialRampToValueAtTime(.001,t+.15);osc.connect(gain);gain.connect(ctx.destination);osc.start(t);osc.stop(t+.16);});
      }
-     await supabase.from("reminders").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",reminder.id).eq("status","pending");
+     if(supabase)await supabase.from("reminders").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",reminder.id).eq("status","pending");
     },delay));
    }
   }
