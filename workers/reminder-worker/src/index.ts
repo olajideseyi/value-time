@@ -33,7 +33,7 @@ async function processReminders(env:Env){
 
 async function processDailySummaries(env:Env){
  if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return;
- const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const base=env.SUPABASE_URL.replace(/\/$/,"");
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const prefUrl=new URL(base+"/rest/v1/user_preferences");
  prefUrl.searchParams.set("select","user_id,timezone,daily_summary_time,daily_summary_enabled,summary_email_enabled,email_notifications_enabled,summary_include_timetable,summary_include_tasks,summary_include_assignments");
