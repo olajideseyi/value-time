@@ -26,7 +26,7 @@ export function ReminderEngine(){
     supabase.from("user_preferences").select("sound_enabled,push_enabled,alarm_sound,alarm_volume,alarm_repeat").eq("user_id",session.user.id).maybeSingle()
    ]);
    if(!live||reminders.error)return;
-   const settings=prefs.data||{};
+   const settings:any=prefs.data||{};
    for(const reminder of reminders.data||[]){
     if(fired.current.has(reminder.id))continue;
     const delay=new Date(reminder.due_at).getTime()-Date.now();if(delay<0||delay>2147480000)continue;
