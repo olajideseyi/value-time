@@ -1,1 +1,0 @@
-create index if not exists schedule_entries_course_id_idx on public.schedule_entries(course_id);
