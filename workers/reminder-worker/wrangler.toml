@@ -1,0 +1,9 @@
+name = "value-time-reminder-worker"
+main = "src/index.ts"
+compatibility_date = "2026-11-17"
+
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true
