@@ -1,6 +1,6 @@
 # Value Time reminder worker
 
-Runs every minute using Cloudflare Cron Triggers and delivers due email reminders through Resend. Telegram remains optional and is intentionally deferred.
+Runs every minute using Cloudflare Cron Triggers. It delivers due email reminders and sends the user's scheduled daily planning briefing through Resend. Telegram remains optional and is intentionally deferred.
 
 ## Required Worker secrets / variables
 
