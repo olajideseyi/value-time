@@ -4,6 +4,10 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-17",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_A-5jkGNT9OaPVSqPvqi_5A_iIoWfLB7",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://emcspruiboxkixcyokka.supabase.co"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -11,7 +15,8 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "value-time"
+      "service": "value-time",
+      "environment": "production"
     }
   ],
   "observability": { "enabled": true }
