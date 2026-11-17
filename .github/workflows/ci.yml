@@ -14,4 +14,5 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run typecheck
+      - run: npx tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM workers/reminder-worker/src/index.ts
       - run: npm run build
