@@ -37,12 +37,12 @@ async function processRecurringScheduleReminders(env:Env){
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
  const existingUrl=new URL(base+"/rest/v1/reminders");
- existingUrl.searchParams.set("select","target_id,due_at,channel");existingUrl.searchParams.set("target_type","eq.schedule");
+ existingUrl.searchParams.set("select","target_id,occurrence_starts_at,reminder_offset_minutes,channel");existingUrl.searchParams.set("target_type","eq.schedule");
  existingUrl.searchParams.set("due_at","gte."+new Date(now.getTime()-86400000).toISOString());
  existingUrl.searchParams.append("and","(due_at.lte."+horizon.toISOString()+")");existingUrl.searchParams.set("limit","10000");
  const existingResponse=await fetch(existingUrl,{headers});if(!existingResponse.ok)throw new Error("Existing schedule reminder lookup failed: "+existingResponse.status);
  const existing=await existingResponse.json() as any[];
- const keys=new Set(existing.map(x=>x.target_id+"|"+new Date(x.due_at).toISOString()+"|"+x.channel));
+ const keys=new Set(existing.filter(x=>x.occurrence_starts_at&&x.reminder_offset_minutes!==null).map(x=>x.target_id+"|"+new Date(x.occurrence_starts_at).toISOString()+"|"+x.reminder_offset_minutes+"|"+x.channel));
  const inserts:any[]=[];
  for(const entry of schedules){
   const tz=entry.timezone||"Africa/Lagos";const start=new Date(entry.starts_at);const time=localTimeParts(start,tz);
@@ -66,7 +66,7 @@ async function processRecurringScheduleReminders(env:Env){
   }
  }
  for(let i=0;i<inserts.length;i+=500){
-  const batch=inserts.slice(i,i+500);const saved=await fetch(base+"/rest/v1/reminders",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify(batch)});
+  const batch=inserts.slice(i,i+500);const insertUrl=new URL(base+"/rest/v1/reminders");insertUrl.searchParams.set("on_conflict","user_id,target_id,occurrence_starts_at,reminder_offset_minutes,channel");const saved=await fetch(insertUrl,{method:"POST",headers:{...headers,Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(batch)});
   if(!saved.ok)throw new Error("Could not create recurring schedule reminders: "+saved.status+" "+await saved.text());
  }
 }
