@@ -59,8 +59,8 @@ async function processRecurringScheduleReminders(env:Env){
     if(dueAt<=now||dueAt>horizon)continue;
     const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
     for(const channel of ["in_app","email"]){
-     const key=entry.id+"|"+dueAt.toISOString()+"|"+channel;if(keys.has(key))continue;
-     keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
+     const key=entry.id+"|"+occurrence.toISOString()+"|"+mins+"|"+channel;if(keys.has(key))continue;
+     keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:Number(mins),title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
     }
    }
   }
