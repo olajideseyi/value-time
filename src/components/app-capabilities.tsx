@@ -45,9 +45,9 @@ export function ReminderEngine(){
     },delay));
    }
   }
-  schedule();const refresh=window.setInterval(()=>{timers.forEach(clearTimeout);timers=[];schedule();},60000);
+  schedule();const refreshTimers=()=>{timers.forEach(clearTimeout);timers=[];schedule();};const refresh=window.setInterval(refreshTimers,60000);window.addEventListener("valuetime:reminders-changed",refreshTimers);
   const auth=supabase?.auth.onAuthStateChange(()=>{timers.forEach(clearTimeout);timers=[];fired.current.clear();schedule();});
-  return()=>{live=false;window.clearInterval(refresh);timers.forEach(clearTimeout);auth?.data.subscription.unsubscribe();window.removeEventListener("pointerdown",unlock);window.removeEventListener("keydown",unlock);};
+  return()=>{live=false;window.clearInterval(refresh);window.removeEventListener("valuetime:reminders-changed",refreshTimers);timers.forEach(clearTimeout);auth?.data.subscription.unsubscribe();window.removeEventListener("pointerdown",unlock);window.removeEventListener("keydown",unlock);};
  },[]);
  return null;
 }
