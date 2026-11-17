@@ -36,6 +36,7 @@ async function processRecurringScheduleReminders(env:Env){
  const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
+ const preferenceUrl=new URL(base+"/rest/v1/user_preferences");preferenceUrl.searchParams.set("select","user_id,email_notifications_enabled");preferenceUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const preferenceResponse=await fetch(preferenceUrl,{headers});const preferenceRows=preferenceResponse.ok?await preferenceResponse.json() as any[]:[];const emailEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.email_notifications_enabled!==false]));
  const existingUrl=new URL(base+"/rest/v1/reminders");
  existingUrl.searchParams.set("select","target_id,occurrence_starts_at,reminder_offset_minutes,channel");existingUrl.searchParams.set("target_type","eq.schedule");
  existingUrl.searchParams.set("due_at","gte."+new Date(now.getTime()-86400000).toISOString());
@@ -58,7 +59,7 @@ async function processRecurringScheduleReminders(env:Env){
     const dueAt=new Date(occurrence.getTime()-Number(mins)*60000);
     if(dueAt<=now||dueAt>horizon)continue;
     const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
-    for(const channel of ["in_app","email"]){
+    for(const channel of (emailEnabled.get(entry.user_id)===false?["in_app"]:["in_app","email"])){
      const key=entry.id+"|"+occurrence.toISOString()+"|"+mins+"|"+channel;if(keys.has(key))continue;
      keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:Number(mins),title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
     }
