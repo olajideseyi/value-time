@@ -30,4 +30,48 @@ async function processReminders(env:Env){
   await fetch(base+"/rest/v1/notification_logs",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({user_id:reminder.user_id,reminder_id:reminder.id,channel:reminder.channel,status,provider_message_id:providerId,error_message:errorMessage})});
  }
 }
-export default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(processReminders(env));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+
+async function processDailySummaries(env:Env){
+ if(!env.RESEND_API_KEY||!env.EMAIL_FROM)return;
+ const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
+ const prefUrl=new URL(base+"/rest/v1/user_preferences");
+ prefUrl.searchParams.set("select","user_id,timezone,daily_summary_time,daily_summary_enabled,summary_email_enabled,email_notifications_enabled,summary_include_timetable,summary_include_tasks,summary_include_assignments");
+ prefUrl.searchParams.set("daily_summary_enabled","eq.true");prefUrl.searchParams.set("summary_email_enabled","eq.true");prefUrl.searchParams.set("email_notifications_enabled","eq.true");
+ const pr=await fetch(prefUrl,{headers});if(!pr.ok)throw new Error("Daily summary preferences query failed.");const prefs=await pr.json() as any[];
+ const now=new Date();
+ const esc=(s:string)=>s.replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]!));
+ for(const p of prefs){
+  const tz=p.timezone||"Africa/Lagos";
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(now);
+  const day=parts.find(x=>x.type==="year")!.value+"-"+parts.find(x=>x.type==="month")!.value+"-"+parts.find(x=>x.type==="day")!.value;
+  const hm=new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(now);
+  if(hm!==String(p.daily_summary_time).slice(0,5))continue;
+  const logUrl=new URL(base+"/rest/v1/notification_logs");logUrl.searchParams.set("select","id");logUrl.searchParams.set("user_id","eq."+p.user_id);logUrl.searchParams.set("channel","eq.email_summary");logUrl.searchParams.set("status","eq.sent");logUrl.searchParams.set("provider_message_id","eq.daily-summary-"+day);logUrl.searchParams.set("limit","1");
+  const lr=await fetch(logUrl,{headers});if(!lr.ok)continue;const existing=await lr.json() as unknown[];if(existing.length)continue;
+  const userResponse=await fetch(base+"/auth/v1/admin/users/"+p.user_id,{headers});if(!userResponse.ok)continue;const user=await userResponse.json() as {email?:string};if(!user.email)continue;
+  const profileUrl=new URL(base+"/rest/v1/profiles");profileUrl.searchParams.set("select","display_name");profileUrl.searchParams.set("id","eq."+p.user_id);const profileResponse=await fetch(profileUrl,{headers});const profileRows=profileResponse.ok?await profileResponse.json() as {display_name:string|null}[]:[];const name=profileRows[0]?.display_name||"there";
+  const from=new Date(now.getTime()-12*60*60*1000).toISOString(),to=new Date(now.getTime()+36*60*60*1000).toISOString();
+  const [schedule,tasks,assignments]=await Promise.all([
+   p.summary_include_timetable?fetchRows(base,"schedule_entries",{...headers},p.user_id,from,to):Promise.resolve([]),
+   p.summary_include_tasks?fetchRows(base,"tasks",{...headers},p.user_id,from,to):Promise.resolve([]),
+   p.summary_include_assignments?fetchRows(base,"assignments",{...headers},p.user_id,from,to):Promise.resolve([])
+  ]);
+  const today=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))===day;
+  const sections:string[]=[];
+  const list=(title:string,items:any[],render:(x:any)=>string)=>{const rows=items.map(render);sections.push("<h2 style='font-size:16px;margin:26px 0 10px'>"+title+"</h2>"+(rows.length?rows.join(""):"<p style='color:#8793a5'>Nothing scheduled.</p>"));};
+  if(p.summary_include_timetable)list("Today's timetable",schedule.filter((x:any)=>x.is_active&&((x.recurrence_type==="weekly"&&x.recurrence_days?.includes(new Date(x.starts_at).getDay()))||today(x.starts_at))),x=>"<p style='padding:10px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b><br><span style='color:#64748b'>"+new Intl.DateTimeFormat("en-NG",{timeZone:tz,hour:"2-digit",minute:"2-digit"}).format(new Date(x.starts_at))+" · "+esc(x.location||"Location not set")+"</span></p>");
+  if(p.summary_include_tasks)list("Tasks to keep moving",tasks.filter((x:any)=>x.status!=="completed"&&(!x.due_at||today(x.due_at))),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'>"+esc(x.title)+"</p>");
+  if(p.summary_include_assignments)list("Assignments due",assignments.filter((x:any)=>x.status!=="completed"&&x.due_at&&today(x.due_at)),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b> · "+esc(x.priority)+"</p>");
+  let status:"sent"|"failed"="failed",providerId:string|null=null,errorMessage:string|null=null;
+  try{providerId=await sendEmail(env,user.email,"Your Value Time daily plan · "+day,"<div style='font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:30px;color:#17243a'><p style='color:#3567d6;font-weight:bold;letter-spacing:2px'>VALUE TIME · DAILY BRIEFING</p><h1 style='font-size:25px'>Good morning, "+esc(name)+".</h1><p style='color:#64748b'>Here is your plan for "+day+".</p>"+sections.join("")+"<p style='margin-top:32px;color:#8793a5;font-size:12px'>Make every moment count.</p></div>");status="sent";}catch(e){errorMessage=e instanceof Error?e.message:"Daily summary delivery failed.";}
+  await fetch(base+"/rest/v1/notification_logs",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({user_id:p.user_id,channel:"email_summary",status,provider_message_id:status==="sent"?"daily-summary-"+day:providerId,error_message:errorMessage})});
+ }
+}
+async function fetchRows(base:string,table:string,headers:Record<string,string>,userId:string,from:string,to:string){
+ const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("created_at","gte."+from);url.searchParams.set("limit","100");
+ if(table==="schedule_entries"){url.searchParams.delete("created_at");url.searchParams.set("starts_at","gte."+from);url.searchParams.set("starts_at","lte."+to);}
+ else{url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}
+ const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
+}
+\nexport default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
