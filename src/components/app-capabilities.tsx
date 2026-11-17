@@ -22,14 +22,14 @@ export function ReminderEngine(){
    if(!supabase)return;
    const {data:{session}}=await supabase.auth.getSession();if(!session||!live)return;
    const [reminders,prefs]=await Promise.all([
-    supabase.from("reminders").select("id,title,message,due_at,channel").eq("user_id",session.user.id).eq("status","pending").in("channel",["in_app","push"]).gte("due_at",new Date().toISOString()).order("due_at").limit(100),
+    supabase.from("reminders").select("id,title,message,due_at,channel").eq("user_id",session.user.id).eq("status","pending").in("channel",["in_app","push"]).order("due_at",{ascending:true}).order("due_at").limit(100),
     supabase.from("user_preferences").select("sound_enabled,push_enabled,alarm_sound,alarm_volume,alarm_repeat").eq("user_id",session.user.id).maybeSingle()
    ]);
    if(!live||reminders.error)return;
    const settings:any=prefs.data||{};
    for(const reminder of reminders.data||[]){
     if(fired.current.has(reminder.id))continue;
-    const delay=new Date(reminder.due_at).getTime()-Date.now();if(delay<0||delay>2147480000)continue;
+    const delay=Math.max(0,new Date(reminder.due_at).getTime()-Date.now());if(delay>2147480000)continue;
     timers.push(setTimeout(async()=>{
      if(!live||fired.current.has(reminder.id))return;fired.current.add(reminder.id);
      const body=reminder.message||"Your scheduled reminder is due.";
@@ -42,6 +42,7 @@ export function ReminderEngine(){
       const rounds=settings.alarm_repeat===false?1:3;
       for(let n=0;n<rounds;n++)tones.forEach((hz,i)=>{const t=ctx.currentTime+n*.85+i*.17;const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type="sine";osc.frequency.value=hz;gain.gain.setValueAtTime(.001,t);gain.gain.linearRampToValueAtTime(vol*.2,t+.025);gain.gain.exponentialRampToValueAtTime(.001,t+.15);osc.connect(gain);gain.connect(ctx.destination);osc.start(t);osc.stop(t+.16);});
      }
+     await supabase.from("reminders").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",reminder.id).eq("status","pending");
     },delay));
    }
   }
