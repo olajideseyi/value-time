@@ -28,7 +28,7 @@ function localDateTimeToUtc(date:string,hour:number,minute:number,tz:string){
  return guess;
 }
 async function processRecurringScheduleReminders(env:Env){
- const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const base=env.SUPABASE_URL.replace(/\/$/,"");
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const scheduleUrl=new URL(base+"/rest/v1/schedule_entries");
  scheduleUrl.searchParams.set("select","id,user_id,title,starts_at,timezone,location,lecturer_name,recurrence_days,recurrence_until,reminder_minutes");
@@ -46,7 +46,7 @@ async function processRecurringScheduleReminders(env:Env){
  const inserts:any[]=[];
  for(const entry of schedules){
   const tz=entry.timezone||"Africa/Lagos";const start=new Date(entry.starts_at);const time=localTimeParts(start,tz);
-  const weekdays=Array.isArray(entry.recurrence_days)&&entry.recurrence_days.length?entry.recurrence_days:[new Date(new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(start)+"T12:00:00Z").getUTCDay()];
+  const weekdays=Array.isArray(entry.recurrence_days)&&entry.recurrence_days.length?entry.recurrence_days:[new Date(new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(start)+"T00:00:00Z").getUTCDay()];
   const reminderMinutes=Array.isArray(entry.reminder_minutes)&&entry.reminder_minutes.length?entry.reminder_minutes:[30,10];
   const today=localParts(now,tz);
   for(let offset=0;offset<=14;offset++){
