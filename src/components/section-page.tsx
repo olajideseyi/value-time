@@ -14,21 +14,7 @@ const cfg:any={
 export default function SectionPage({section}:{section:string}){
  const router=useRouter(), c=cfg[section]; const [uid,setUid]=useState("");const [rows,setRows]=useState<any[]>([]);const [form,setForm]=useState<any>({});const [show,setShow]=useState(false);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState("");const [err,setErr]=useState("");const [profile,setProfile]=useState<any>({});const [prefs,setPrefs]=useState<any>({});
  useEffect(()=>{let live=true;(async()=>{if(!supabase){setErr("Your workspace is temporarily unavailable.");return;}const {data:{session}}=await supabase.auth.getSession();if(!session){router.replace("/");return;}if(!live)return;setUid(session.user.id);if(section==="settings"){const [p,pr]=await Promise.all([supabase.from("profiles").select("*").eq("id",session.user.id).maybeSingle(),supabase.from("user_preferences").select("*").eq("user_id",session.user.id).maybeSingle()]);setProfile(p.data||{});setPrefs(pr.data||{});}else{const {data,error}=await supabase.from(c.table).select("*").order("created_at",{ascending:false});if(error)setErr(error.message);setRows(data||[]);}})();return()=>{live=false}},[section,router]);
-  useEffect(()=>{
-    if(section!=="reminders"||!rows.length)return;
-    const timers:ReturnType<typeof setTimeout>[]=[];
-    rows.filter(r=>r.status==="pending").forEach(r=>{
-      const delay=new Date(r.due_at).getTime()-Date.now();
-      if(delay>0&&delay<2147480000){
-        timers.push(setTimeout(()=>{
-          if("Notification" in window&&Notification.permission==="granted")new Notification(r.title,{body:r.message||"Your Value Time reminder is due."});
-          try{const A=window.AudioContext||(window as any).webkitAudioContext;const a=new A(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=.07;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.55);}catch{}
-          setMsg("Reminder: "+r.title);
-        },delay));
-      }
-    });
-    return()=>timers.forEach(clearTimeout);
-  },[section,rows]);
+
  if(!c&&section!=="settings")return <main className="section-page"><Link href="/">Back to overview</Link></main>;
  async function add(e:FormEvent){e.preventDefault();if(!supabase)return;setBusy(true);setErr("");const v:any={...form,user_id:uid};if(section==="reminders")v.target_type="custom";if(section==="timetable"&&v.recurrence_type==="weekly"&&v.starts_at&&(!Array.isArray(v.recurrence_days)||!v.recurrence_days.length))v.recurrence_days=[new Date(v.starts_at).getDay()];["starts_at","ends_at","due_at"].forEach(k=>{if(v[k])v[k]=new Date(v[k]).toISOString()});if(section==="timetable"&&v.recurrence_type!=="weekly")v.recurrence_days=[];const {data,error}=await supabase.from(c.table).insert(v).select("*").single();if(error)setErr(error.message);else{setRows([data,...rows]);setShow(false);setMsg("Saved successfully.");setForm({});}setBusy(false)}
  async function remove(id:string){if(!supabase||!confirm("Delete this item?"))return;const {error}=await supabase.from(c.table).delete().eq("id",id);if(error)setErr(error.message);else setRows(rows.filter(x=>x.id!==id))}
