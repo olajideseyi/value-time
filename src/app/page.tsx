@@ -61,7 +61,7 @@ export default function Home() {
       ]);
       if (!active) return;
       setDisplayName(profile.data?.display_name?.split(" ")[0] || session!.user.email?.split("@")[0] || "there");
-      setTasks(taskRows.data || []); const todaySchedule=(scheduleRows.data||[]).filter(item=>item.recurrence_type==="weekly"?(item.recurrence_days||[]).includes(today.getDay())&&(!item.recurrence_until||item.recurrence_until>=today.toISOString().slice(0,10)):new Date(item.starts_at).toDateString()===today.toDateString()).sort((a,b)=>new Date(a.starts_at).getTime()-new Date(b.starts_at).getTime()).slice(0,6); setSchedule(todaySchedule); setAssignments(assignmentRows.data || []); setExams(examRows.data || []);
+      setTasks(taskRows.data || []); const todaySchedule=(scheduleRows.data||[]).filter(item=>item.recurrence_type==="weekly"?(item.recurrence_days?.length?item.recurrence_days:[new Date(item.starts_at).getDay()]).includes(today.getDay())&&(!item.recurrence_until||item.recurrence_until>=today.toISOString().slice(0,10)):new Date(item.starts_at).toDateString()===today.toDateString()).sort((a,b)=>new Date(a.starts_at).getTime()-new Date(b.starts_at).getTime()).slice(0,6); setSchedule(todaySchedule); setAssignments(assignmentRows.data || []); setExams(examRows.data || []);
     }
     load();
     return () => { active = false; };
