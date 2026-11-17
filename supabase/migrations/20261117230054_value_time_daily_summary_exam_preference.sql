@@ -1,0 +1,1 @@
+alter table public.user_preferences add column if not exists summary_include_exams boolean not null default true;
