@@ -1,0 +1,10 @@
+{
+  "name":"Value Time",
+  "short_name":"Value Time",
+  "description":"Personal productivity and academic automation",
+  "start_url":"/",
+  "display":"standalone",
+  "background_color":"#f4f6fa",
+  "theme_color":"#101a2c",
+  "icons":[]
+}
