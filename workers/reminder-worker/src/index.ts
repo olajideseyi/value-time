@@ -8,6 +8,68 @@ async function sendEmail(env:Env,to:string,subject:string,html:string){
  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
  const data=await r.json() as {id?:string;message?:string};if(!r.ok)throw new Error(data.message||"Resend email failed with HTTP "+r.status);return data.id||null;
 }
+function localParts(date:Date,tz:string){
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+ return {year:Number(parts.find(x=>x.type==="year")!.value),month:Number(parts.find(x=>x.type==="month")!.value),day:Number(parts.find(x=>x.type==="day")!.value)};
+}
+function localTimeParts(date:Date,tz:string){
+ const parts=new Intl.DateTimeFormat("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);
+ return {hour:Number(parts.find(x=>x.type==="hour")!.value),minute:Number(parts.find(x=>x.type==="minute")!.value)};
+}
+function localDateTimeToUtc(date:string,hour:number,minute:number,tz:string){
+ const [year,month,day]=date.split("-").map(Number);
+ const desired=Date.UTC(year,month-1,day,hour,minute);
+ let guess=new Date(desired);
+ for(let i=0;i<3;i++){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(guess);
+  const actual=Date.UTC(Number(parts.find(x=>x.type==="year")!.value),Number(parts.find(x=>x.type==="month")!.value)-1,Number(parts.find(x=>x.type==="day")!.value),Number(parts.find(x=>x.type==="hour")!.value),Number(parts.find(x=>x.type==="minute")!.value));
+  guess=new Date(guess.getTime()+desired-actual);
+ }
+ return guess;
+}
+async function processRecurringScheduleReminders(env:Env){
+ const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
+ const scheduleUrl=new URL(base+"/rest/v1/schedule_entries");
+ scheduleUrl.searchParams.set("select","id,user_id,title,starts_at,timezone,location,lecturer_name,recurrence_days,recurrence_until,reminder_minutes");
+ scheduleUrl.searchParams.set("is_active","eq.true");scheduleUrl.searchParams.set("recurrence_type","eq.weekly");scheduleUrl.searchParams.set("limit","500");
+ const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
+ const schedules=await response.json() as any[];if(!schedules.length)return;
+ const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
+ const existingUrl=new URL(base+"/rest/v1/reminders");
+ existingUrl.searchParams.set("select","target_id,due_at,channel");existingUrl.searchParams.set("target_type","eq.schedule");
+ existingUrl.searchParams.set("due_at","gte."+new Date(now.getTime()-86400000).toISOString());
+ existingUrl.searchParams.append("and","(due_at.lte."+horizon.toISOString()+")");existingUrl.searchParams.set("limit","10000");
+ const existingResponse=await fetch(existingUrl,{headers});if(!existingResponse.ok)throw new Error("Existing schedule reminder lookup failed: "+existingResponse.status);
+ const existing=await existingResponse.json() as any[];
+ const keys=new Set(existing.map(x=>x.target_id+"|"+new Date(x.due_at).toISOString()+"|"+x.channel));
+ const inserts:any[]=[];
+ for(const entry of schedules){
+  const tz=entry.timezone||"Africa/Lagos";const start=new Date(entry.starts_at);const time=localTimeParts(start,tz);
+  const weekdays=Array.isArray(entry.recurrence_days)&&entry.recurrence_days.length?entry.recurrence_days:[new Date(new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(start)+"T12:00:00Z").getUTCDay()];
+  const reminderMinutes=Array.isArray(entry.reminder_minutes)&&entry.reminder_minutes.length?entry.reminder_minutes:[30,10];
+  const today=localParts(now,tz);
+  for(let offset=0;offset<=14;offset++){
+   const dateObj=new Date(Date.UTC(today.year,today.month-1,today.day+offset));
+   const date=dateObj.toISOString().slice(0,10);const weekday=dateObj.getUTCDay();
+   if(!weekdays.includes(weekday)||entry.recurrence_until&&date>entry.recurrence_until)continue;
+   const occurrence=localDateTimeToUtc(date,time.hour,time.minute,tz);
+   for(const mins of reminderMinutes){
+    const dueAt=new Date(occurrence.getTime()-Number(mins)*60000);
+    if(dueAt<=now||dueAt>horizon)continue;
+    const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
+    for(const channel of ["in_app","email"]){
+     const key=entry.id+"|"+dueAt.toISOString()+"|"+channel;if(keys.has(key))continue;
+     keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
+    }
+   }
+  }
+ }
+ for(let i=0;i<inserts.length;i+=500){
+  const batch=inserts.slice(i,i+500);const saved=await fetch(base+"/rest/v1/reminders",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify(batch)});
+  if(!saved.ok)throw new Error("Could not create recurring schedule reminders: "+saved.status+" "+await saved.text());
+ }
+}
 async function processReminders(env:Env){
  const base=env.SUPABASE_URL.replace(/\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(telegram,email)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
@@ -78,4 +140,4 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
