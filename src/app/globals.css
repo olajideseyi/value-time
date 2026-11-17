@@ -22,3 +22,4 @@
 .calendar-attendance{display:flex;gap:4px;margin-top:3px}.calendar-attendance button{border:1px solid #dce5f1;background:#fff;border-radius:4px;padding:4px 5px;font-size:8px;color:#61728b}.calendar-attendance button:first-child{color:#21835b}
 
 .assignment-upload{display:grid;gap:7px;margin:15px 0;padding:15px;border:1px dashed #cbd6e4;border-radius:9px;background:#f8faff;color:#34445b;font-size:12px;font-weight:700}.assignment-upload input{font-weight:400;font-size:12px}.assignment-upload small{font-size:10px;color:#8492a6;font-weight:400}.attachment-link{border:0;background:#edf3ff;color:#3767b7;padding:7px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}
+.reminder-action{border:1px solid #d9e3f0;background:#f5f8fd;color:#3d67aa;border-radius:6px;padding:7px 9px;font-size:9px;font-weight:700;white-space:nowrap;cursor:pointer}.reminder-action.dismiss{background:#fff7f7;border-color:#f0dddd;color:#a65c5c}
