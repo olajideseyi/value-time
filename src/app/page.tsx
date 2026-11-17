@@ -114,7 +114,7 @@ export default function Home() {
           {authMode === "signup" && <label>Full name<input value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Your name" required/></label>}
           <label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required/></label>
           <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" minLength={8} autoComplete={authMode==="signin"?"current-password":"new-password"} required/></label>
-          {authError && <p className="form-error">{authError}</p>}{notice && <p className="form-success">{notice}</p>}
+          {authMode === "signin" && <button type="button" className="forgot-password" onClick={async()=>{if(!supabase||!email){setAuthError("Enter your email address first.");return;}const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});setAuthError(error?.message||"If an account exists for this email, a password reset link has been sent.");}}>Forgot password?</button>}{authError && <p className="form-error">{authError}</p>}{notice && <p className="form-success">{notice}</p>}
           <button className="primary-button full-button" disabled={busy || !isSupabaseConfigured}>{!isSupabaseConfigured ? "Coming soon" : busy ? "Please wait…" : authMode==="signin" ? "Sign in" : "Create account"}<ArrowRight size={17}/></button>
         </form>
         <p className="auth-switch">{authMode==="signin" ? "New to Value Time?" : "Already have an account?"} <button onClick={()=>{setAuthMode(authMode==="signin"?"signup":"signin");setAuthError("");setNotice("");}}>{authMode==="signin"?"Create an account":"Sign in"}</button></p>
@@ -129,14 +129,14 @@ export default function Home() {
       <div className="workspace-label">WORKSPACE</div>
       <nav className="side-nav">
         <a className="nav-link active" href="#"><LayoutDashboard size={18}/> Overview</a>
-        <a className="nav-link" href="#timetable"><CalendarDays size={18}/> Timetable</a>
-        <a className="nav-link" href="#assignments"><ClipboardList size={18}/> Assignments</a>
-        <a className="nav-link" href="#tasks"><CheckCircle2 size={18}/> My tasks</a>
-        <a className="nav-link" href="#reminders"><AlarmClock size={18}/> Alarms & reminders</a>
+        <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
+        <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
+        <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
+        <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
       </nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-tip"><div className="tip-icon"><Target size={18}/></div><strong>Make today count.</strong><p>Small steps, done consistently, make a remarkable difference.</p></div>
-      <button className="nav-link settings-link"><Settings2 size={18}/> Settings <span className="soon-tag">SOON</span></button>
+      <a className="nav-link settings-link" href="/settings"><Settings2 size={18}/> Settings</a>
       <div className="sidebar-user"><div className="avatar">{displayName.slice(0,1).toUpperCase()}</div><div className="user-meta"><strong>{displayName}</strong><span>Personal workspace</span></div><button className="icon-button" onClick={signOut} aria-label="Sign out"><LogOut size={17}/></button></div>
     </aside>
     {mobileNav && <button className="nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)}/>}
