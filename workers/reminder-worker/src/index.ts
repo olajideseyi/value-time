@@ -52,10 +52,11 @@ async function processDailySummaries(env:Env){
   const userResponse=await fetch(base+"/auth/v1/admin/users/"+p.user_id,{headers});if(!userResponse.ok)continue;const user=await userResponse.json() as {email?:string};if(!user.email)continue;
   const profileUrl=new URL(base+"/rest/v1/profiles");profileUrl.searchParams.set("select","display_name");profileUrl.searchParams.set("id","eq."+p.user_id);const profileResponse=await fetch(profileUrl,{headers});const profileRows=profileResponse.ok?await profileResponse.json() as {display_name:string|null}[]:[];const name=profileRows[0]?.display_name||"there";
   const from=new Date(now.getTime()-12*60*60*1000).toISOString(),to=new Date(now.getTime()+36*60*60*1000).toISOString();
-  const [schedule,tasks,assignments]=await Promise.all([
+  const [schedule,tasks,assignments,exams]=await Promise.all([
    p.summary_include_timetable?fetchRows(base,"schedule_entries",{...headers},p.user_id,from,to):Promise.resolve([]),
    p.summary_include_tasks?fetchRows(base,"tasks",{...headers},p.user_id,from,to):Promise.resolve([]),
-   p.summary_include_assignments?fetchRows(base,"assignments",{...headers},p.user_id,from,to):Promise.resolve([])
+   p.summary_include_assignments?fetchRows(base,"assignments",{...headers},p.user_id,from,to):Promise.resolve([]),
+   fetchRows(base,"examinations",{...headers},p.user_id,from,to)
   ]);
   const today=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))===day;const localWeekday=(value:string)=>new Intl.DateTimeFormat("en-US",{timeZone:tz,weekday:"short"}).format(new Date(value));const weekdayNumber=(short:string)=>({Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6} as Record<string,number>)[short]??-1;
   const sections:string[]=[];
@@ -63,6 +64,7 @@ async function processDailySummaries(env:Env){
   if(p.summary_include_timetable)list("Today's timetable",schedule.filter((x:any)=>x.is_active&&((x.recurrence_type==="weekly"&&x.recurrence_days?.includes(weekdayNumber(localWeekday(x.starts_at))))||today(x.starts_at))),x=>"<p style='padding:10px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b><br><span style='color:#64748b'>"+new Intl.DateTimeFormat("en-NG",{timeZone:tz,hour:"2-digit",minute:"2-digit"}).format(new Date(x.starts_at))+" · "+esc(x.location||"Location not set")+"</span></p>");
   if(p.summary_include_tasks)list("Tasks to keep moving",tasks.filter((x:any)=>x.status!=="completed"&&(!x.due_at||today(x.due_at))),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'>"+esc(x.title)+"</p>");
   if(p.summary_include_assignments)list("Assignments due",assignments.filter((x:any)=>x.status!=="completed"&&x.due_at&&today(x.due_at)),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b> · "+esc(x.priority)+"</p>");
+  list("Examinations & assessments",exams.filter((x:any)=>x.status==="scheduled"&&x.starts_at&&today(x.starts_at)),x=>"<p style='padding:8px 0;border-bottom:1px solid #edf0f4'><b>"+esc(x.title)+"</b> · "+new Intl.DateTimeFormat("en-NG",{timeZone:tz,hour:"2-digit",minute:"2-digit"}).format(new Date(x.starts_at))+"</p>");
   let status:"sent"|"failed"="failed",providerId:string|null=null,errorMessage:string|null=null;
   try{providerId=await sendEmail(env,user.email,"Your Value Time daily plan · "+day,"<div style='font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:30px;color:#17243a'><p style='color:#3567d6;font-weight:bold;letter-spacing:2px'>VALUE TIME · DAILY BRIEFING</p><h1 style='font-size:25px'>Good morning, "+esc(name)+".</h1><p style='color:#64748b'>Here is your plan for "+day+".</p>"+sections.join("")+"<p style='margin-top:32px;color:#8793a5;font-size:12px'>Make every moment count.</p></div>");status="sent";}catch(e){errorMessage=e instanceof Error?e.message:"Daily summary delivery failed.";}
   await fetch(base+"/rest/v1/notification_logs",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({user_id:p.user_id,channel:"email_summary",status,provider_message_id:status==="sent"?"daily-summary-"+day:providerId,error_message:errorMessage})});
@@ -71,7 +73,7 @@ async function processDailySummaries(env:Env){
 async function fetchRows(base:string,table:string,headers:Record<string,string>,userId:string,from:string,to:string){
  const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("user_id","eq."+userId);url.searchParams.set("limit","100");
  if(table==="schedule_entries"){url.searchParams.set("is_active","eq.true");}
- else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("due_at","lte."+to);}else{url.searchParams.set("status","neq.completed");}
+ else if(table==="assignments"){url.searchParams.append("due_at","gte."+from);url.searchParams.append("due_at","lte."+to);}else if(table==="examinations"){url.searchParams.append("starts_at","gte."+from);url.searchParams.append("starts_at","lte."+to);}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
 \nexport default {async scheduled(_event:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(Promise.all([processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
