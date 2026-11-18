@@ -1,13 +1,88 @@
-export interface Env { SUPABASE_URL:string; SUPABASE_SERVICE_ROLE_KEY:string; TELEGRAM_BOT_TOKEN?:string; RESEND_API_KEY?:string; EMAIL_FROM?:string; }
+export interface Env { SUPABASE_URL:string; SUPABASE_SERVICE_ROLE_KEY:string; TELEGRAM_BOT_TOKEN?:string; RESEND_API_KEY?:string; EMAIL_FROM?:string; VAPID_PUBLIC_KEY?:string; VAPID_PRIVATE_JWK?:string; VAPID_SUBJECT?:string; }
 interface WorkerScheduledController { cron:string; scheduledTime:number; }
 interface WorkerExecutionContext { waitUntil(promise:Promise<unknown>):void; passThroughOnException():void; }
-type DueReminder={id:string;user_id:string;title:string;message:string|null;attempts:number;channel:"telegram"|"email"};
+type DueReminder={id:string;user_id:string;title:string;message:string|null;attempts:number;channel:"telegram"|"email"|"push"};
 type TelegramConnection={telegram_chat_id:string|null;notifications_enabled:boolean};
 async function sendEmail(env:Env,to:string,subject:string,html:string){
  if(!env.RESEND_API_KEY||!env.EMAIL_FROM)throw new Error("Email delivery is not configured. Add RESEND_API_KEY and EMAIL_FROM to the reminder Worker secrets.");
  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,html})});
  const data=await r.json() as {id?:string;message?:string};if(!r.ok)throw new Error(data.message||"Resend email failed with HTTP "+r.status);return data.id||null;
 }
+
+type PushSubscriptionRow={id:string;endpoint:string;p256dh:string;auth_secret:string};
+const utf8=(value:string)=>new TextEncoder().encode(value);
+function bytesToBase64Url(bytes:Uint8Array){
+ let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);
+ return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function base64UrlToBytes(value:string){
+ const padded=value.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((value.length+3)%4);
+ const binary=atob(padded);return Uint8Array.from(binary,c=>c.charCodeAt(0));
+}
+function concatBytes(...parts:Uint8Array[]){
+ const result=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let offset=0;
+ for(const part of parts){result.set(part,offset);offset+=part.length;}return result;
+}
+async function hkdf(input:Uint8Array,salt:Uint8Array,info:Uint8Array,length:number){
+ const key=await crypto.subtle.importKey("raw",input,"HKDF",false,["deriveBits"]);
+ return new Uint8Array(await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt,info},key,length*8));
+}
+async function vapidToken(endpoint:string,env:Env){
+ if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK)throw new Error("Web Push is not configured. Add VAPID_PUBLIC_KEY and VAPID_PRIVATE_JWK to the reminder Worker.");
+ const audience=new URL(endpoint).origin;
+ const header=bytesToBase64Url(utf8(JSON.stringify({typ:"JWT",alg:"ES256"})));
+ const claims=bytesToBase64Url(utf8(JSON.stringify({aud:audience,exp:Math.floor(Date.now()/1000)+12*60*60,sub:env.VAPID_SUBJECT||"mailto:support@valuetime.app"})));
+ const unsigned=header+"."+claims;
+ const privateKey=await crypto.subtle.importKey("jwk",JSON.parse(env.VAPID_PRIVATE_JWK),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
+ const signature=new Uint8Array(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,utf8(unsigned)));
+ return unsigned+"."+bytesToBase64Url(signature);
+}
+async function encryptPushPayload(subscription:PushSubscriptionRow,payload:string){
+ const clientPublic=base64UrlToBytes(subscription.p256dh),authSecret=base64UrlToBytes(subscription.auth_secret);
+ if(clientPublic.length!==65||authSecret.length!==16)throw new Error("Stored push subscription keys are invalid.");
+ const pair=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]) as CryptoKeyPair;
+ const serverPublic=new Uint8Array(await crypto.subtle.exportKey("raw",pair.publicKey));
+ const peer=await crypto.subtle.importKey("raw",clientPublic,{name:"ECDH",namedCurve:"P-256"},false,[]);
+ const shared=new Uint8Array(await crypto.subtle.deriveBits({name:"ECDH",public:peer},pair.privateKey,256));
+ const ikm=await hkdf(shared,authSecret,concatBytes(utf8("WebPush: info\0"),clientPublic,serverPublic),32);
+ const salt=crypto.getRandomValues(new Uint8Array(16));
+ const cek=await hkdf(ikm,salt,utf8("Content-Encoding: aes128gcm\0"),16);
+ const nonce=await hkdf(ikm,salt,utf8("Content-Encoding: nonce\0"),12);
+ const key=await crypto.subtle.importKey("raw",cek,{name:"AES-GCM"},false,["encrypt"]);
+ const plain=concatBytes(utf8(payload),new Uint8Array([2]));
+ const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:nonce,tagLength:128},key,plain));
+ const recordSize=new Uint8Array([0,0,16,0]);
+ const keyLength=new Uint8Array([serverPublic.length]);
+ return concatBytes(salt,recordSize,keyLength,serverPublic,encrypted);
+}
+async function sendWebPush(env:Env,subscription:PushSubscriptionRow,payload:{title:string;body:string;url?:string;tag?:string}){
+ const token=await vapidToken(subscription.endpoint,env);
+ const body=await encryptPushPayload(subscription,JSON.stringify(payload));
+ const response=await fetch(subscription.endpoint,{method:"POST",headers:{
+  "Authorization":"vapid t="+token+", k="+env.VAPID_PUBLIC_KEY,
+  "Content-Type":"application/octet-stream","Content-Encoding":"aes128gcm","TTL":"300","Urgency":"high"
+ },body});
+ if(response.status===404||response.status===410)return {expired:true,status:response.status};
+ if(!response.ok)throw new Error("Push service returned HTTP "+response.status+": "+(await response.text()).slice(0,300));
+ return {expired:false,status:response.status};
+}
+async function deliverPush(env:Env,base:string,headers:Record<string,string>,userId:string,reminder:DueReminder){
+ if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK)throw new Error("Web Push is not configured on the reminder Worker.");
+ const url=new URL(base+"/rest/v1/push_subscriptions");url.searchParams.set("select","id,endpoint,p256dh,auth_secret");url.searchParams.set("user_id","eq."+userId);
+ const response=await fetch(url,{headers});if(!response.ok)throw new Error("Could not load push subscriptions: HTTP "+response.status);
+ const subscriptions=await response.json() as PushSubscriptionRow[];if(!subscriptions.length)throw new Error("No registered browser or device push subscription was found.");
+ let delivered=0;const failures:string[]=[];
+ for(const subscription of subscriptions){
+  try{
+   const result=await sendWebPush(env,subscription,{title:reminder.title,body:reminder.message||"Your scheduled reminder is due.",url:"/reminders",tag:reminder.id});
+   if(result.expired){await fetch(base+"/rest/v1/push_subscriptions?id=eq."+subscription.id,{method:"DELETE",headers});continue;}
+   delivered++;await fetch(base+"/rest/v1/push_subscriptions?id=eq."+subscription.id,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({last_success_at:new Date().toISOString()})});
+  }catch(error){failures.push(error instanceof Error?error.message:"Push delivery failed.");}
+ }
+ if(!delivered)throw new Error(failures[0]||"All push subscriptions have expired.");
+ return "push:"+delivered;
+}
+
 function localParts(date:Date,tz:string){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
  return {year:Number(parts.find(x=>x.type==="year")!.value),month:Number(parts.find(x=>x.type==="month")!.value),day:Number(parts.find(x=>x.type==="day")!.value)};
@@ -36,7 +111,7 @@ async function processRecurringScheduleReminders(env:Env){
  const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
- const preferenceUrl=new URL(base+"/rest/v1/user_preferences");preferenceUrl.searchParams.set("select","user_id,email_notifications_enabled");preferenceUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const preferenceResponse=await fetch(preferenceUrl,{headers});const preferenceRows=preferenceResponse.ok?await preferenceResponse.json() as any[]:[];const emailEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.email_notifications_enabled!==false]));
+ const preferenceUrl=new URL(base+"/rest/v1/user_preferences");preferenceUrl.searchParams.set("select","user_id,email_notifications_enabled,push_enabled");preferenceUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const preferenceResponse=await fetch(preferenceUrl,{headers});const preferenceRows=preferenceResponse.ok?await preferenceResponse.json() as any[]:[];const emailEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.email_notifications_enabled!==false]));const pushEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.push_enabled!==false]));
  const existingUrl=new URL(base+"/rest/v1/reminders");
  existingUrl.searchParams.set("select","target_id,occurrence_starts_at,reminder_offset_minutes,channel");existingUrl.searchParams.set("target_type","eq.schedule");
  existingUrl.searchParams.set("due_at","gte."+new Date(now.getTime()-86400000).toISOString());
@@ -59,7 +134,7 @@ async function processRecurringScheduleReminders(env:Env){
     const dueAt=new Date(occurrence.getTime()-Number(mins)*60000);
     if(dueAt<=now||dueAt>horizon)continue;
     const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
-    for(const channel of (emailEnabled.get(entry.user_id)===false?["in_app"]:["in_app","email"])){
+    for(const channel of (["in_app",...(emailEnabled.get(entry.user_id)===false?[]:["email"]),...(pushEnabled.get(entry.user_id)===false?[]:["push"])] as const)){
      const key=entry.id+"|"+occurrence.toISOString()+"|"+mins+"|"+channel;if(keys.has(key))continue;
      keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:Number(mins),title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
     }
@@ -73,7 +148,7 @@ async function processRecurringScheduleReminders(env:Env){
 }
 async function processReminders(env:Env){
  const base=env.SUPABASE_URL.replace(/\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
- const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","eq.email");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
+ const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(email,push)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
  const response=await fetch(q,{headers});if(!response.ok)throw new Error("Supabase reminder query failed: "+response.status+" "+await response.text());const reminders=await response.json() as DueReminder[];
  for(const reminder of reminders){
   const claimUrl=new URL(base+"/rest/v1/reminders");claimUrl.searchParams.set("id","eq."+reminder.id);claimUrl.searchParams.set("status","eq.pending");
@@ -86,6 +161,8 @@ async function processReminders(env:Env){
     const body=esc(reminder.message||"Your scheduled reminder is due.").replace(/\n/g,"<br/>");
     const html="<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px;color:#17243a\"><p style=\"color:#3567d6;font-weight:bold;letter-spacing:2px\">VALUE TIME</p><h1>"+esc(reminder.title)+"</h1><p style=\"line-height:1.7;color:#52627a\">"+body+"</p><p style=\"margin-top:32px;color:#8793a5;font-size:12px\">A reminder from your Value Time workspace.</p></div>";
     providerId=await sendEmail(env,user.email,"Value Time reminder: "+reminder.title,html);
+   }else if(reminder.channel==="push"){
+    const prefUrl=new URL(base+"/rest/v1/user_preferences");prefUrl.searchParams.set("select","push_enabled");prefUrl.searchParams.set("user_id","eq."+reminder.user_id);const prefResponse=await fetch(prefUrl,{headers});const prefRows=await prefResponse.json() as {push_enabled:boolean}[];if(prefRows[0]?.push_enabled===false)throw new Error("Background push notifications are disabled in account preferences.");providerId=await deliverPush(env,base,headers,reminder.user_id,reminder);
    }else{
     if(!env.TELEGRAM_BOT_TOKEN)throw new Error("Telegram delivery is not configured.");const cq=new URL(base+"/rest/v1/telegram_connections");cq.searchParams.set("select","telegram_chat_id,notifications_enabled");cq.searchParams.set("user_id","eq."+reminder.user_id);const cr=await fetch(cq,{headers});if(!cr.ok)throw new Error("Telegram connection lookup failed.");const conns=await cr.json() as TelegramConnection[];const c=conns[0];if(!c?.telegram_chat_id||!c.notifications_enabled)throw new Error("No connected Telegram chat or notifications disabled.");
     const tr=await fetch("https://api.telegram.org/bot"+env.TELEGRAM_BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:c.telegram_chat_id,text:"🔔 "+reminder.title+"\n\n"+(reminder.message||"Your scheduled reminder is due."),disable_web_page_preview:true})});const td=await tr.json() as {ok?:boolean;description?:string;result?:{message_id?:number}};if(!tr.ok||!td.ok)throw new Error(td.description||"Telegram returned HTTP "+tr.status);providerId=String(td.result?.message_id??"");
@@ -141,4 +218,4 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processReminders(env),processDailySummaries(env)]));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processReminders(env),processDailySummaries(env)]).catch(error=>console.error("Scheduled reminder run failed:",error)));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
