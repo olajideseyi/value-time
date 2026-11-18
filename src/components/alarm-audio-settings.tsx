@@ -134,7 +134,7 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
     </label>
     <div className="alarm-audio-actions">
       <button type="button" className="secondary-button" onClick={preview} disabled={previewing || (preferences.alarm_sound === "custom" && !customPath)}><Play size={14}/> Preview sound</button>
-      {previewing && <button type="button" className="secondary-button" onClick={stopPreview}><Square size={13}/> Stop</button>}
+      {previewing && preferences.alarm_sound === "custom" && <button type="button" className="secondary-button" onClick={stopPreview}><Square size={13}/> Stop</button>}
     </div>
     <label className="alarm-volume-label">Volume <strong>{Math.round(volume * 100)}%</strong>
       <input type="range" min="0" max="1" step="0.05" value={volume} onChange={e => onChange({ alarm_volume: Number(e.target.value) })}/>
