@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { AudioLines, Play, Square, Upload, Trash2, CheckCircle2 } from "lucide-react";
 
@@ -83,7 +83,7 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
     setPreviewing(false);
   }
 
-  async function upload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !supabase) return;
     if (!file.type.startsWith("audio/")) { setNote("Choose an audio file."); event.target.value = ""; return; }
