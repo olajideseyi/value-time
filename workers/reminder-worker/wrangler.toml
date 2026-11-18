@@ -2,6 +2,9 @@ name = "value-time-reminder-worker"
 main = "src/index.ts"
 compatibility_date = "2026-11-17"
 
+[vars]
+VAPID_PUBLIC_KEY = "BGaE34rSjkHec2lx_Xewd7ZDNalvLzRPtj_59t8-8uxoFII4yApwZH15muyBazGqN9sUtEUkQg-DPfDdlbs5SoQ"
+
 [triggers]
 crons = ["* * * * *"]
 
