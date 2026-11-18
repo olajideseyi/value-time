@@ -63,6 +63,9 @@ if(section==="timetable"&&v.starts_at&&v.ends_at){const start=new Date(v.starts_
   try{
    const {data:{user},error:userError}=await supabase.auth.getUser();
    if(userError||!user?.email)throw new Error("Could not confirm the signed-in email address.");
+   const {data:emailPrefs,error:prefError}=await supabase.from("user_preferences").select("email_notifications_enabled").eq("user_id",uid).maybeSingle();
+   if(prefError)throw new Error(prefError.message);
+   if(emailPrefs?.email_notifications_enabled===false)throw new Error("Enable Email reminders in your notification preferences before running this test.");
    const {error}=await supabase.from("reminders").insert({user_id:uid,target_type:"custom",target_id:null,title:"Value Time email delivery test",message:"Your Value Time email notification service has received this test.",channel:"email",due_at:new Date(Date.now()+30000).toISOString(),status:"pending"});
    if(error)throw new Error(error.message);
    setMsg("Test email queued for "+user.email+". The reminder Worker will attempt delivery shortly. Check your inbox and spam folder.");
