@@ -31,10 +31,10 @@ async function hkdf(input:Uint8Array,salt:Uint8Array,info:Uint8Array,length:numb
  return new Uint8Array(await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt:saltBuffer,info:infoBuffer},key,length*8));
 }
 async function vapidToken(endpoint:string,env:Env){
- if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK)throw new Error("Web Push is not configured. Add VAPID_PUBLIC_KEY and VAPID_PRIVATE_JWK to the reminder Worker.");
+ if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK||!env.VAPID_SUBJECT)throw new Error("Web Push is not configured. Add VAPID_PUBLIC_KEY, VAPID_PRIVATE_JWK, and VAPID_SUBJECT to the reminder Worker.");
  const audience=new URL(endpoint).origin;
  const header=bytesToBase64Url(utf8(JSON.stringify({typ:"JWT",alg:"ES256"})));
- const claims=bytesToBase64Url(utf8(JSON.stringify({aud:audience,exp:Math.floor(Date.now()/1000)+12*60*60,sub:env.VAPID_SUBJECT||"mailto:support@valuetime.app"})));
+ const claims=bytesToBase64Url(utf8(JSON.stringify({aud:audience,exp:Math.floor(Date.now()/1000)+12*60*60,sub:env.VAPID_SUBJECT})));
  const unsigned=header+"."+claims;
  const privateKey=await crypto.subtle.importKey("jwk",JSON.parse(env.VAPID_PRIVATE_JWK),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
  const signature=new Uint8Array(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,utf8(unsigned)));
@@ -70,7 +70,7 @@ async function sendWebPush(env:Env,subscription:PushSubscriptionRow,payload:{tit
  return {expired:false,status:response.status};
 }
 async function deliverPush(env:Env,base:string,headers:Record<string,string>,userId:string,reminder:DueReminder){
- if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK)throw new Error("Web Push is not configured on the reminder Worker.");
+ if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK||!env.VAPID_SUBJECT)throw new Error("Web Push is not configured on the reminder Worker.");
  const url=new URL(base+"/rest/v1/push_subscriptions");url.searchParams.set("select","id,endpoint,p256dh,auth_secret");url.searchParams.set("user_id","eq."+userId);
  const response=await fetch(url,{headers});if(!response.ok)throw new Error("Could not load push subscriptions: HTTP "+response.status);
  const subscriptions=await response.json() as PushSubscriptionRow[];if(!subscriptions.length)throw new Error("No registered browser or device push subscription was found.");
@@ -114,7 +114,7 @@ async function processRecurringScheduleReminders(env:Env){
  const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
- const pushSubscriptionsUrl=new URL(base+"/rest/v1/push_subscriptions");pushSubscriptionsUrl.searchParams.set("select","user_id");pushSubscriptionsUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const pushSubscriptionsResponse=await fetch(pushSubscriptionsUrl,{headers});const pushReady=new Set(pushSubscriptionsResponse.ok?(await pushSubscriptionsResponse.json() as {user_id:string}[]).map(x=>x.user_id):[]);
+ const pushSubscriptionsUrl=new URL(base+"/rest/v1/push_subscriptions");pushSubscriptionsUrl.searchParams.set("select","user_id");pushSubscriptionsUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const pushSubscriptionsResponse=await fetch(pushSubscriptionsUrl,{headers});if(!pushSubscriptionsResponse.ok)throw new Error("Push subscription lookup failed: HTTP "+pushSubscriptionsResponse.status+" "+(await pushSubscriptionsResponse.text()).slice(0,250));const pushReady=new Set((await pushSubscriptionsResponse.json() as {user_id:string}[]).map(x=>x.user_id));
  const preferenceUrl=new URL(base+"/rest/v1/user_preferences");preferenceUrl.searchParams.set("select","user_id,email_notifications_enabled,push_enabled");preferenceUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const preferenceResponse=await fetch(preferenceUrl,{headers});const preferenceRows=preferenceResponse.ok?await preferenceResponse.json() as any[]:[];const emailEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.email_notifications_enabled!==false]));const pushEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.push_enabled!==false]));
  const existingUrl=new URL(base+"/rest/v1/reminders");
  existingUrl.searchParams.set("select","target_id,occurrence_starts_at,reminder_offset_minutes,channel");existingUrl.searchParams.set("target_type","eq.schedule");
