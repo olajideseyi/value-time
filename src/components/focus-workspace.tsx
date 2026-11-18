@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Check, CheckCircle2, Clock3, Flame, Leaf, Pause, Play,
-  Plus, RotateCcw, Target, Trash2, TrendingUp, Trophy, Volume2
+  Plus, RotateCcw, Trash2, TrendingUp, Trophy, Volume2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
