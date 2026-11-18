@@ -94,8 +94,11 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
       const path = userId + "/" + crypto.randomUUID() + "." + extension;
       const { error } = await supabase.storage.from("alarm-audio").upload(path, file, { contentType: file.type, upsert: false });
       if (error) throw error;
+      const saved = await supabase.from("user_preferences").upsert({ user_id: userId, custom_alarm_path: path, custom_alarm_name: file.name, alarm_sound: "custom" }, { onConflict: "user_id" });
+      if (saved.error) { await supabase.storage.from("alarm-audio").remove([path]); throw saved.error; }
       onChange({ custom_alarm_path: path, custom_alarm_name: file.name, alarm_sound: "custom" });
-      setNote("Custom alarm uploaded. Save your preferences to keep this selection.");
+      if (customPath) await supabase.storage.from("alarm-audio").remove([customPath]);
+      setNote("Your custom alarm is uploaded and saved.");
     } catch (error) {
       setNote(error instanceof Error ? error.message : "The audio upload failed.");
     } finally {
@@ -108,11 +111,13 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
     if (!supabase || !customPath) return;
     setUploading(true); setNote("");
     try {
+      const saved = await supabase.from("user_preferences").update({ custom_alarm_path: null, custom_alarm_name: null, alarm_sound: "classic" }).eq("user_id", userId);
+      if (saved.error) throw saved.error;
       const { error } = await supabase.storage.from("alarm-audio").remove([customPath]);
-      if (error) throw error;
+      if (error) setNote("Your custom alarm was disconnected, but its stored file could not be deleted: " + error.message);
+      else setNote("Custom audio removed.");
       onChange({ custom_alarm_path: null, custom_alarm_name: null, alarm_sound: "classic" });
       stopPreview();
-      setNote("Custom audio removed.");
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Could not remove the custom audio.");
     } finally { setUploading(false); }
