@@ -13,7 +13,7 @@ const cfg:any={
  reminders:{title:"Alarms & reminders",table:"reminders",icon:AlarmClock,fields:[["title","Reminder title","text"],["message","Details","textarea"],["due_at","Alert time","datetime-local"],["channel","Notification","select:in_app,push,email"]]}
 };
 export default function SectionPage({section}:{section:string}){
- const router=useRouter(), c=cfg[section]; const [uid,setUid]=useState("");const [rows,setRows]=useState<any[]>([]);const [courses,setCourses]=useState<any[]>([]);const [calendarView,setCalendarView]=useState("week");const [focusDate,setFocusDate]=useState(new Date().toISOString().slice(0,10));const [form,setForm]=useState<any>({});const [show,setShow]=useState(false);const [editingId,setEditingId]=useState("");const [assignmentFile,setAssignmentFile]=useState<File|null>(null);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState("");const [err,setErr]=useState("");const [profile,setProfile]=useState<any>({});const [prefs,setPrefs]=useState<any>({});const [pushDeviceActive,setPushDeviceActive]=useState(false);
+ const router=useRouter(), c=cfg[section]; const [uid,setUid]=useState("");const [rows,setRows]=useState<any[]>([]);const [courses,setCourses]=useState<any[]>([]);const [calendarView,setCalendarView]=useState("week");const [focusDate,setFocusDate]=useState(new Date().toISOString().slice(0,10));const [form,setForm]=useState<any>({});const [show,setShow]=useState(false);const [editingId,setEditingId]=useState("");const [assignmentFile,setAssignmentFile]=useState<File|null>(null);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState("");const [err,setErr]=useState("");const [profile,setProfile]=useState<any>({});const [prefs,setPrefs]=useState<any>({});
  useEffect(()=>{let live=true;(async()=>{if(!supabase){setErr("Your workspace is temporarily unavailable.");return;}const {data:{session}}=await supabase.auth.getSession();if(!session){router.replace("/");return;}if(!live)return;setUid(session.user.id);if(section==="settings"){const [p,pr]=await Promise.all([supabase.from("profiles").select("*").eq("id",session.user.id).maybeSingle(),supabase.from("user_preferences").select("*").eq("user_id",session.user.id).maybeSingle()]);setProfile(p.data||{});setPrefs(pr.data||{});}else{const [items,courseRows,userPrefs]=await Promise.all([supabase.from(c.table).select("*").order("created_at",{ascending:false}),supabase.from("courses").select("id,name,code,instructor").order("name"),supabase.from("user_preferences").select("email_notifications_enabled").eq("user_id",session.user.id).maybeSingle()]);if(items.error)setErr(items.error.message);setRows(items.data||[]);setCourses(courseRows.data||[]);setPrefs(userPrefs.data||{});}})();return()=>{live=false}},[section,router]);
 
  if(!c&&section!=="settings")return <main className="section-page"><Link href="/">Back to overview</Link></main>;
@@ -53,7 +53,7 @@ if(section==="timetable"&&v.starts_at&&v.ends_at){const start=new Date(v.starts_
    if(saved.error)throw new Error(saved.error.message);
    const pref=await supabase.from("user_preferences").update({push_enabled:true}).eq("user_id",uid);
    if(pref.error)throw new Error(pref.error.message);
-   setPrefs({...prefs,push_enabled:true});setPushDeviceActive(true);setMsg("Background push is enabled on this device. A test notification is available after the reminder Worker has its VAPID keys.");
+   setPrefs({...prefs,push_enabled:true});setMsg("Background push is registered on this device. Delivery will begin once the reminder Worker VAPID secrets are configured.");
   }catch(error){setErr(error instanceof Error?error.message:"Could not enable background push notifications.");}
   setBusy(false);
  }
@@ -65,7 +65,7 @@ if(section==="timetable"&&v.starts_at&&v.ends_at){const start=new Date(v.starts_
    if(subscription){const removed=await supabase.from("push_subscriptions").delete().eq("user_id",uid).eq("endpoint",subscription.endpoint);if(removed.error)throw new Error(removed.error.message);await subscription.unsubscribe();}
    const pref=await supabase.from("user_preferences").update({push_enabled:false}).eq("user_id",uid);
    if(pref.error)throw new Error(pref.error.message);
-   setPrefs({...prefs,push_enabled:false});setPushDeviceActive(false);setMsg("Background push notifications are disabled on this device.");
+   setPrefs({...prefs,push_enabled:false});setMsg("Background push notifications are disabled on this device.");
   }catch(error){setErr(error instanceof Error?error.message:"Could not disable background push.");}
   setBusy(false);
  }
