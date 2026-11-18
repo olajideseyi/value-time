@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlarmClock, ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown,
   CircleHelp, ClipboardList, Clock3, Command, LayoutDashboard, LogOut, Menu,
-  Plus, Send, Settings2, Sparkles, Target, TrendingUp, X
+  Plus, Send, FileText, Settings2, Sparkles, Target, TrendingUp, X
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -144,6 +144,7 @@ export default function Home() {
         <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
         <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
         <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
+        <a className="nav-link" href="/notes"><FileText size={18}/> Notes & resources</a>
       </nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-tip"><div className="tip-icon"><Target size={18}/></div><strong>Make today count.</strong><p>Small steps, done consistently, make a remarkable difference.</p></div>
