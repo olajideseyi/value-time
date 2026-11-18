@@ -111,7 +111,7 @@ async function processRecurringScheduleReminders(env:Env){
  const scheduleUrl=new URL(base+"/rest/v1/schedule_entries");
  scheduleUrl.searchParams.set("select","id,user_id,title,starts_at,timezone,location,lecturer_name,recurrence_days,recurrence_until,reminder_minutes");
  scheduleUrl.searchParams.set("is_active","eq.true");scheduleUrl.searchParams.set("recurrence_type","eq.weekly");scheduleUrl.searchParams.set("limit","500");
- const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
+ const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: HTTP "+response.status+" "+(await response.text()).slice(0,500));
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
  const pushSubscriptionsUrl=new URL(base+"/rest/v1/push_subscriptions");pushSubscriptionsUrl.searchParams.set("select","user_id");pushSubscriptionsUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const pushSubscriptionsResponse=await fetch(pushSubscriptionsUrl,{headers});if(!pushSubscriptionsResponse.ok)throw new Error("Push subscription lookup failed: HTTP "+pushSubscriptionsResponse.status+" "+(await pushSubscriptionsResponse.text()).slice(0,250));const pushReady=new Set((await pushSubscriptionsResponse.json() as {user_id:string}[]).map(x=>x.user_id));
@@ -262,4 +262,25 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processRecurringTasks(env),processReminders(env),processDailySummaries(env)]).catch(error=>console.error("Scheduled reminder run failed:",error)));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+function errorDetails(error:unknown){return {message:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined};}
+function checkRequiredConfig(env:Env){
+ const required=["SUPABASE_URL","SUPABASE_SERVICE_ROLE_KEY"] as const;
+ const missing=required.filter(key=>!env[key]||!String(env[key]).trim());
+ return {missing,optional:{RESEND_API_KEY:!!env.RESEND_API_KEY,EMAIL_FROM:!!env.EMAIL_FROM,VAPID_PUBLIC_KEY:!!env.VAPID_PUBLIC_KEY,VAPID_PRIVATE_JWK:!!env.VAPID_PRIVATE_JWK,VAPID_SUBJECT:!!env.VAPID_SUBJECT}};
+}
+async function runScheduledJob(name:string,job:()=>Promise<unknown>){
+ const started=Date.now();
+ try{await job();console.log(JSON.stringify({event:"scheduled_job_ok",job,duration_ms:Date.now()-started}));}
+ catch(error){console.error(JSON.stringify({event:"scheduled_job_failed",job,duration_ms:Date.now()-started,...errorDetails(error)}));}
+}
+export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){
+ const config=checkRequiredConfig(env);
+ console.log(JSON.stringify({event:"worker_config_check",required_missing:config.missing,optional_present:config.optional}));
+ if(config.missing.length){console.error("Worker configuration invalid: required settings are missing",config.missing);return;}
+ ctx.waitUntil(Promise.all([
+  runScheduledJob("recurring_schedule_reminders",()=>processRecurringScheduleReminders(env)),
+  runScheduledJob("recurring_tasks",()=>processRecurringTasks(env)),
+  runScheduledJob("pending_reminders",()=>processReminders(env)),
+  runScheduledJob("daily_summaries",()=>processDailySummaries(env))
+ ]));
+},async fetch(request:Request,env:Env){const config=checkRequiredConfig(env);return Response.json({service:"value-time-reminder-worker",status:config.missing.length?"configuration_incomplete":"running",required_missing:config.missing,optional_present:config.optional},{headers:{"Cache-Control":"no-store"}});}};
