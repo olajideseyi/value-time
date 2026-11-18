@@ -1,0 +1,2 @@
+import PlannerWorkspace from "@/components/planner-workspace";
+export default function PlannerPage(){return <PlannerWorkspace/>;}

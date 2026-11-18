@@ -143,6 +143,7 @@ export default function Home() {
         <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
         <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
         <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
+        <a className="nav-link" href="/planner"><CalendarClock size={18}/> Daily planner</a>
       </nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-tip"><div className="tip-icon"><Target size={18}/></div><strong>Make today count.</strong><p>Small steps, done consistently, make a remarkable difference.</p></div>
