@@ -21,7 +21,7 @@ export function ReminderEngine(){
    if(!supabase)return;
    const {data:{session}}=await supabase.auth.getSession();if(!session||!live)return;
    const [reminders,prefs]=await Promise.all([
-    supabase.from("reminders").select("id,title,message,due_at,channel").eq("user_id",session.user.id).eq("status","pending").in("channel",["in_app","push"]).order("due_at",{ascending:true}).order("due_at").limit(100),
+    supabase.from("reminders").select("id,title,message,due_at,channel").eq("user_id",session.user.id).eq("status","pending").eq("channel","in_app").order("due_at",{ascending:true}).order("due_at").limit(100),
     supabase.from("user_preferences").select("sound_enabled,push_enabled,alarm_sound,alarm_volume,alarm_repeat").eq("user_id",session.user.id).maybeSingle()
    ]);
    if(!live||reminders.error)return;
