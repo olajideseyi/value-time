@@ -111,6 +111,7 @@ async function processRecurringScheduleReminders(env:Env){
  const response=await fetch(scheduleUrl,{headers});if(!response.ok)throw new Error("Recurring timetable query failed: "+response.status);
  const schedules=await response.json() as any[];if(!schedules.length)return;
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000);
+ const pushSubscriptionsUrl=new URL(base+"/rest/v1/push_subscriptions");pushSubscriptionsUrl.searchParams.set("select","user_id");pushSubscriptionsUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const pushSubscriptionsResponse=await fetch(pushSubscriptionsUrl,{headers});const pushReady=new Set(pushSubscriptionsResponse.ok?(await pushSubscriptionsResponse.json() as {user_id:string}[]).map(x=>x.user_id):[]);
  const preferenceUrl=new URL(base+"/rest/v1/user_preferences");preferenceUrl.searchParams.set("select","user_id,email_notifications_enabled,push_enabled");preferenceUrl.searchParams.set("user_id","in.("+[...new Set(schedules.map(x=>x.user_id))].join(",")+")");const preferenceResponse=await fetch(preferenceUrl,{headers});const preferenceRows=preferenceResponse.ok?await preferenceResponse.json() as any[]:[];const emailEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.email_notifications_enabled!==false]));const pushEnabled=new Map(preferenceRows.map(x=>[x.user_id,x.push_enabled!==false]));
  const existingUrl=new URL(base+"/rest/v1/reminders");
  existingUrl.searchParams.set("select","target_id,occurrence_starts_at,reminder_offset_minutes,channel");existingUrl.searchParams.set("target_type","eq.schedule");
@@ -134,7 +135,7 @@ async function processRecurringScheduleReminders(env:Env){
     const dueAt=new Date(occurrence.getTime()-Number(mins)*60000);
     if(dueAt<=now||dueAt>horizon)continue;
     const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
-    for(const channel of (["in_app",...(emailEnabled.get(entry.user_id)===false?[]:["email"]),...(pushEnabled.get(entry.user_id)===false?[]:["push"])] as const)){
+    for(const channel of (["in_app",...(emailEnabled.get(entry.user_id)===false?[]:["email"]),...(pushEnabled.get(entry.user_id)===false||!pushReady.has(entry.user_id)?[]:["push"])] as const)){
      const key=entry.id+"|"+occurrence.toISOString()+"|"+mins+"|"+channel;if(keys.has(key))continue;
      keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:Number(mins),title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
     }
