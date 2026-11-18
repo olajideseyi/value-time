@@ -24,8 +24,11 @@ function concatBytes(...parts:Uint8Array[]){
  for(const part of parts){result.set(part,offset);offset+=part.length;}return result;
 }
 async function hkdf(input:Uint8Array,salt:Uint8Array,info:Uint8Array,length:number){
- const key=await crypto.subtle.importKey("raw",input,"HKDF",false,["deriveBits"]);
- return new Uint8Array(await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt,info},key,length*8));
+ const inputBuffer=input.slice().buffer as ArrayBuffer;
+ const saltBuffer=salt.slice().buffer as ArrayBuffer;
+ const infoBuffer=info.slice().buffer as ArrayBuffer;
+ const key=await crypto.subtle.importKey("raw",inputBuffer,"HKDF",false,["deriveBits"]);
+ return new Uint8Array(await crypto.subtle.deriveBits({name:"HKDF",hash:"SHA-256",salt:saltBuffer,info:infoBuffer},key,length*8));
 }
 async function vapidToken(endpoint:string,env:Env){
  if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_JWK)throw new Error("Web Push is not configured. Add VAPID_PUBLIC_KEY and VAPID_PRIVATE_JWK to the reminder Worker.");
