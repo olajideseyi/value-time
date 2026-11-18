@@ -76,9 +76,12 @@ if(section==="timetable"&&v.starts_at&&v.ends_at){const start=new Date(v.starts_
    const registration=await navigator.serviceWorker.getRegistration("/");
    const subscription=await registration?.pushManager.getSubscription();
    if(subscription){const removed=await supabase.from("push_subscriptions").delete().eq("user_id",uid).eq("endpoint",subscription.endpoint);if(removed.error)throw new Error(removed.error.message);await subscription.unsubscribe();}
-   const pref=await supabase.from("user_preferences").update({push_enabled:false}).eq("user_id",uid);
+   const {data:remaining,error:remainingError}=await supabase.from("push_subscriptions").select("id").eq("user_id",uid).limit(1);
+   if(remainingError)throw new Error(remainingError.message);
+   const stillEnabled=!!remaining?.length;
+   const pref=await supabase.from("user_preferences").update({push_enabled:stillEnabled}).eq("user_id",uid);
    if(pref.error)throw new Error(pref.error.message);
-   setPrefs({...prefs,push_enabled:false});setMsg("Background push notifications are disabled on this device.");
+   setPrefs({...prefs,push_enabled:stillEnabled});setMsg(stillEnabled?"This device is disconnected. Background push remains active on your other registered devices.":"Background push notifications are disabled because no devices remain registered.");
   }catch(error){setErr(error instanceof Error?error.message:"Could not disable background push.");}
   setBusy(false);
  }
