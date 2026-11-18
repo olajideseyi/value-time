@@ -141,6 +141,7 @@ export default function Home() {
         <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
         <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
         <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
+        <a className="nav-link" href="/subtasks"><ClipboardList size={18}/> Subtasks</a>
         <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
         <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
         <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
