@@ -150,6 +150,46 @@ async function processRecurringScheduleReminders(env:Env){
   if(!saved.ok)throw new Error("Could not create recurring schedule reminders: "+saved.status+" "+await saved.text());
  }
 }
+async function processRecurringTasks(env:Env){
+ const base=env.SUPABASE_URL.replace(/\/$/,"");
+ const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
+ const q=new URL(base+"/rest/v1/tasks");
+ q.searchParams.set("select","id,user_id,title,description,priority,due_at,recurrence_rule,recurrence_parent_id,recurrence_generated_at,completed_at,estimated_minutes");
+ q.searchParams.set("is_recurring","eq.true");q.searchParams.set("status","eq.completed");q.searchParams.set("recurrence_rule","not.is.null");q.searchParams.set("limit","200");
+ const response=await fetch(q,{headers});if(!response.ok)throw new Error("Recurring task query failed: "+response.status+" "+(await response.text()).slice(0,300));
+ const tasks=await response.json() as any[];if(!tasks.length)return;
+ const ids=[...new Set(tasks.map(t=>t.user_id))];const prefUrl=new URL(base+"/rest/v1/user_preferences");prefUrl.searchParams.set("select","user_id,timezone");prefUrl.searchParams.set("user_id","in.("+ids.join(",")+")");
+ const prefResponse=await fetch(prefUrl,{headers});const prefRows=prefResponse.ok?await prefResponse.json() as {user_id:string;timezone:string|null}[]:[];
+ const timezones=new Map(prefRows.map(p=>[p.user_id,p.timezone||"Africa/Lagos"]));
+ for(const task of tasks){
+  if(task.completed_at&&task.recurrence_generated_at&&new Date(task.recurrence_generated_at)>=new Date(task.completed_at))continue;
+  const rule=String(task.recurrence_rule).toLowerCase();if(!["daily","weekly","monthly"].includes(rule))continue;
+  const completedAt=task.completed_at?new Date(task.completed_at):new Date();
+  const dueAt=task.due_at?new Date(task.due_at):completedAt;
+  const baseDate=new Date(Math.max(completedAt.getTime(),dueAt.getTime()));
+  const tz=timezones.get(task.user_id)||"Africa/Lagos";
+  const parts=localParts(baseDate,tz),clock=localTimeParts(baseDate,tz);
+  let date: string;
+  if(rule==="monthly"){
+   const nextMonth=new Date(Date.UTC(parts.year,parts.month,1));
+   const lastDay=new Date(Date.UTC(nextMonth.getUTCFullYear(),nextMonth.getUTCMonth()+1,0)).getUTCDate();
+   date=[nextMonth.getUTCFullYear(),String(nextMonth.getUTCMonth()+1).padStart(2,"0"),String(Math.min(parts.day,lastDay)).padStart(2,"0")].join("-");
+  }else{
+   const next=new Date(Date.UTC(parts.year,parts.month-1,parts.day+(rule==="weekly"?7:1)));
+   date=next.toISOString().slice(0,10);
+  }
+  const nextDue=localDateTimeToUtc(date,clock.hour,clock.minute,tz);
+  const rootId=task.recurrence_parent_id||task.id;
+  const insertUrl=new URL(base+"/rest/v1/tasks");insertUrl.searchParams.set("on_conflict","recurrence_parent_id,due_at");
+  const body={user_id:task.user_id,title:task.title,description:task.description,priority:task.priority,status:"pending",due_at:nextDue.toISOString(),is_recurring:true,recurrence_rule:rule,recurrence_parent_id:rootId,estimated_minutes:task.estimated_minutes||45};
+  const inserted=await fetch(insertUrl,{method:"POST",headers:{...headers,Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(body)});
+  if(!inserted.ok)throw new Error("Could not generate next recurring task: "+inserted.status+" "+(await inserted.text()).slice(0,300));
+  const markUrl=new URL(base+"/rest/v1/tasks");markUrl.searchParams.set("id","eq."+task.id);
+  const marked=await fetch(markUrl,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({recurrence_generated_at:new Date().toISOString()})});
+  if(!marked.ok)throw new Error("Could not mark recurring task occurrence: "+marked.status);
+ }
+}
+
 async function processReminders(env:Env){
  const base=env.SUPABASE_URL.replace(/\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(email,push)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
@@ -222,4 +262,4 @@ async function fetchRows(base:string,table:string,headers:Record<string,string>,
  else if(table==="assignments"){url.searchParams.set("due_at","gte."+from);url.searchParams.set("and","(due_at.lte."+to+")");}else if(table==="examinations"){url.searchParams.set("starts_at","gte."+from);url.searchParams.set("and","(starts_at.lte."+to+")");}else{url.searchParams.set("status","neq.completed");}
  const r=await fetch(url,{headers});return r.ok?await r.json() as any[]:[];
 }
-export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processReminders(env),processDailySummaries(env)]).catch(error=>console.error("Scheduled reminder run failed:",error)));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
+export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:WorkerExecutionContext){ctx.waitUntil(Promise.all([processRecurringScheduleReminders(env),processRecurringTasks(env),processReminders(env),processDailySummaries(env)]).catch(error=>console.error("Scheduled reminder run failed:",error)));},async fetch(){return new Response("Value Time reminder worker is running.",{headers:{"Content-Type":"text/plain"}});}};
