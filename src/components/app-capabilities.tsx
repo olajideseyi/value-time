@@ -11,7 +11,7 @@ export function InstallAppButton(){
  return <button className="pwa-install" onClick={async()=>{if(!prompt){const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);alert(ios?"To add Value Time to your Home Screen, open this page in Safari, tap Share, then choose Add to Home Screen.":"Open your browser menu and choose Install app or Add to Home screen. If that option is unavailable, check that you are using the latest browser over HTTPS.");return;}await prompt.prompt();const result=await prompt.userChoice;if(result?.outcome==="accepted")setInstalled(true);setPrompt(null);}}><Download size={15}/> Install app</button>;
 }
 export function ReminderEngine(){
- const audio=useRef<AudioContext|null>(null);const customAudio=useRef<HTMLAudioElement|null>(null);const fired=useRef<Map<string,string>>(new Map());
+ const audio=useRef<AudioContext|null>(null);const customAudio=useRef<HTMLAudioElement|null>(null);const customAudioPath=useRef<string|null>(null);const fired=useRef<Map<string,string>>(new Map());
  useEffect(()=>{
   if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
   const unlock=async()=>{try{const C=window.AudioContext||(window as any).webkitAudioContext;if(!C)return;if(!audio.current)audio.current=new C();if(audio.current.state==="suspended")await audio.current.resume();}catch{}};
@@ -26,7 +26,7 @@ export function ReminderEngine(){
    ]);
    if(!live||reminders.error)return;
    const settings:any=prefs.data||{};
-   if(settings.custom_alarm_path&&settings.alarm_sound==="custom"){const signed=await supabase.storage.from("alarm-audio").createSignedUrl(settings.custom_alarm_path,3600);if(signed.data?.signedUrl){customAudio.current?.pause();customAudio.current=new Audio(signed.data.signedUrl);customAudio.current.volume=Math.max(0,Math.min(1,Number(settings.alarm_volume??.75)));}}
+   if(settings.custom_alarm_path&&settings.alarm_sound==="custom"&&customAudioPath.current!==settings.custom_alarm_path){const signed=await supabase.storage.from("alarm-audio").createSignedUrl(settings.custom_alarm_path,3600);if(signed.data?.signedUrl){customAudio.current?.pause();customAudio.current=new Audio(signed.data.signedUrl);customAudio.current.volume=Math.max(0,Math.min(1,Number(settings.alarm_volume??.75)));customAudioPath.current=settings.custom_alarm_path;}}else if(settings.alarm_sound!=="custom"){customAudio.current?.pause();customAudio.current=null;customAudioPath.current=null;}
    for(const reminder of reminders.data||[]){
     if(fired.current.get(reminder.id)===reminder.due_at)continue;
     const delay=Math.max(0,new Date(reminder.due_at).getTime()-Date.now());if(delay>2147480000)continue;
@@ -47,7 +47,7 @@ export function ReminderEngine(){
    }
   }
   schedule();const refreshTimers=()=>{timers.forEach(clearTimeout);timers=[];schedule();};const refresh=window.setInterval(refreshTimers,60000);window.addEventListener("valuetime:reminders-changed",refreshTimers);
-  const auth=supabase?.auth.onAuthStateChange(()=>{timers.forEach(clearTimeout);timers=[];fired.current.clear();schedule();});
+  const auth=supabase?.auth.onAuthStateChange(()=>{timers.forEach(clearTimeout);timers=[];fired.current.clear();customAudio.current?.pause();customAudio.current=null;customAudioPath.current=null;schedule();});
   return()=>{live=false;window.clearInterval(refresh);window.removeEventListener("valuetime:reminders-changed",refreshTimers);timers.forEach(clearTimeout);auth?.data.subscription.unsubscribe();window.removeEventListener("pointerdown",unlock);window.removeEventListener("keydown",unlock);};
  },[]);
  return null;
