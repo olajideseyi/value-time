@@ -1,6 +1,6 @@
 # Value Time reminder worker
 
-Runs every minute using the Cron Trigger in `wrangler.toml`. It delivers due email reminders and sends the user's scheduled daily planning briefing through Resend. Daily briefings can include the timetable, tasks, assignments, and examinations. Telegram remains optional and is intentionally deferred.
+Runs every minute using the Cron Trigger in `wrangler.toml`. It generates the next daily, weekly, or monthly task occurrence when a recurring task is completed, delivers due email and Web Push reminders, creates rolling recurring timetable alerts, and sends the user's scheduled daily planning briefing through Resend. Daily briefings can include the timetable, tasks, assignments, and examinations. Telegram remains optional and is intentionally deferred.
 
 ## Deploy as a separate Cloudflare Worker
 
