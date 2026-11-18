@@ -18,9 +18,9 @@ This is a separate scheduled Worker from the main Next.js application Worker.
 - `SUPABASE_SERVICE_ROLE_KEY`: privileged Supabase key; store only as a Worker secret.
 - `RESEND_API_KEY`: Resend API key (Worker secret).
 - `EMAIL_FROM`: verified sender identity, e.g. `Value Time <reminders@your-verified-domain>`.
-- `VAPID_PUBLIC_KEY`: public P-256 VAPID key used by browsers.
+- `VAPID_PUBLIC_KEY`: public P-256 VAPID key, already declared in `wrangler.toml`.
 - `VAPID_PRIVATE_JWK`: private VAPID JWK (Worker secret only; never commit it).
-- `VAPID_SUBJECT`: contact URI, e.g. `mailto:you@example.com`.
+- `VAPID_SUBJECT`: a contact URI you control, e.g. `mailto:your-real-email@example.com` (add as a Worker variable).
 
 Optional:
 - `TELEGRAM_BOT_TOKEN`: add later when Telegram is configured.
