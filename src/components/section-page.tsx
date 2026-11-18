@@ -103,7 +103,7 @@ if(section==="timetable"&&v.starts_at&&v.ends_at){const start=new Date(v.starts_
  async function exportBackup(){
   if(!supabase||!uid)return;
   setBusy(true);setErr("");setMsg("");
-  const tables=["user_preferences","courses","schedule_entries","assignments","tasks","attendance","reminders","notification_logs","examinations","focus_sessions","habits","habit_entries","notes"];
+  const tables=["user_preferences","courses","schedule_entries","assignments","tasks","attendance","reminders","notification_logs","examinations","focus_sessions","habits","habit_entries","notes","task_subtasks"];
   try{
    const [profileResult,...tableResults]=await Promise.all([
     supabase.from("profiles").select("*").eq("id",uid).maybeSingle(),
