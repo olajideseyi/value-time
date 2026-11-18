@@ -16,6 +16,20 @@ type Course = { id: string; name: string; code: string | null };
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const localDateKey = (d: Date) => [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
+function habitStreak(habit:Habit, entries:HabitEntry[], today:string) {
+  let count = 0;
+  const todayDone = entries.some(e=>e.habit_id===habit.id&&e.entry_date===today&&e.completed);
+  const todayScheduled = habit.frequency==="daily" || habit.target_days.includes(new Date().getDay());
+  const firstOffset = todayScheduled && !todayDone ? 1 : 0;
+  for (let offset=firstOffset; offset<45; offset++) {
+    const date=new Date(); date.setDate(date.getDate()-offset);
+    if (habit.frequency==="weekly" && !habit.target_days.includes(date.getDay())) continue;
+    const key=localDateKey(date);
+    if (entries.some(e=>e.habit_id===habit.id&&e.entry_date===key&&e.completed)) count++;
+    else break;
+  }
+  return count;
+}
 const formatMinutes = (seconds: number) => {
   const minutes = Math.round(seconds / 60);
   return minutes < 60 ? minutes + " min" : Math.floor(minutes / 60) + "h " + (minutes % 60) + "m";
@@ -189,7 +203,7 @@ export default function FocusWorkspace() {
       <section className="habits-section">
         <div className="section-title-row"><div><span className="focus-kicker">SMALL ACTIONS, BIG MOMENTUM</span><h2>Your habits & routines</h2><p>Check off the routines you complete today.</p></div><span className="habit-count"><Leaf size={15}/>{habits.length} active habits</span></div>
         <form className="habit-create" onSubmit={addHabit}><input value={habitTitle} onChange={e=>setHabitTitle(e.target.value)} placeholder="Add a habit — e.g. Read for 20 minutes" maxLength={100} required/><select value={habitFrequency} onChange={e=>setHabitFrequency(e.target.value as "daily"|"weekly")}><option value="daily">Every day</option><option value="weekly">Selected days</option></select>{habitFrequency==="weekly"&&<div className="habit-day-picker">{dayNames.map((d,i)=><label key={d} className={habitDays.includes(i)?"active":""}><input type="checkbox" checked={habitDays.includes(i)} onChange={e=>setHabitDays(current=>e.target.checked?[...current,i]:current.filter(x=>x!==i))}/>{d}</label>)}</div>}<button className="habit-add" disabled={!habitTitle.trim()||habitFrequency==="weekly"&&!habitDays.length}><Plus size={16}/> Add habit</button></form>
-        {habits.length ? <div className="habit-grid">{habits.map(h=>{const done=entries.some(e=>e.habit_id===h.id&&e.entry_date===today&&e.completed);const scheduled=h.frequency==="daily"||h.target_days.includes(new Date().getDay());return <article className={done?"habit-card is-done":"habit-card"} key={h.id}><div className="habit-card-mark"><Leaf size={18}/></div><div className="habit-card-copy"><strong>{h.title}</strong><span>{h.frequency==="daily"?"Daily routine":"Every "+h.target_days.map(d=>dayNames[d]).join(", ")}</span></div><button className="habit-check" disabled={!scheduled} onClick={()=>void toggleHabit(h)} aria-label={done?"Mark habit incomplete":"Mark habit complete"}>{done?<Check size={17}/>:<span/>}</button><button className="habit-delete" onClick={()=>void deleteHabit(h.id)} aria-label="Delete habit"><Trash2 size={15}/></button></article>;})}</div> : <div className="habits-empty"><Trophy size={23}/><strong>Build a routine that works for you.</strong><span>Add your first habit above and track your consistency here.</span></div>}
+        {habits.length ? <div className="habit-grid">{habits.map(h=>{const done=entries.some(e=>e.habit_id===h.id&&e.entry_date===today&&e.completed);const scheduled=h.frequency==="daily"||h.target_days.includes(new Date().getDay());return <article className={done?"habit-card is-done":"habit-card"} key={h.id}><div className="habit-card-mark"><Leaf size={18}/></div><div className="habit-card-copy"><strong>{h.title}</strong><span>{h.frequency==="daily"?"Daily routine":"Every "+h.target_days.map(d=>dayNames[d]).join(", ")} · 🔥 {habitStreak(h,entries,today)} day streak</span></div><button className="habit-check" disabled={!scheduled} onClick={()=>void toggleHabit(h)} aria-label={done?"Mark habit incomplete":"Mark habit complete"}>{done?<Check size={17}/>:<span/>}</button><button className="habit-delete" onClick={()=>void deleteHabit(h.id)} aria-label="Delete habit"><Trash2 size={15}/></button></article>;})}</div> : <div className="habits-empty"><Trophy size={23}/><strong>Build a routine that works for you.</strong><span>Add your first habit above and track your consistency here.</span></div>}
       </section>
       <section className="focus-history"><div className="section-title-row"><div><span className="focus-kicker">RECENT ACTIVITY</span><h2>Focus history</h2><p>Your recorded sessions from the past seven days.</p></div></div>{sessions.length?<div className="focus-history-list">{sessions.slice(0,8).map(s=><div className="focus-history-row" key={s.id}><div className="history-icon"><Clock3 size={16}/></div><div><strong>{s.title}</strong><span>{new Intl.DateTimeFormat("en-NG",{weekday:"short",day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(s.started_at))}</span></div><b>{formatMinutes(s.duration_seconds)}</b></div>)}</div>:<div className="history-empty">Your completed focus sessions will appear here.</div>}</section>
       <footer className="focus-footer">VALUE TIME <i>·</i> BUILD A BETTER RELATIONSHIP WITH YOUR TIME</footer>
