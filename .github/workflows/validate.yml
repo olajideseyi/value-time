@@ -24,6 +24,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run TypeScript checks
         run: npm run typecheck
+      - name: Check reminder worker types
+        run: npx tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM workers/reminder-worker/src/index.ts
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
