@@ -49,12 +49,25 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const volume = Math.max(0, Math.min(1, Number(preferences.alarm_volume ?? 0.75)));
   const customPath = preferences.custom_alarm_path as string | undefined;
+  const acceptedAudio = /\.(mp3|wav|ogg|oga|m4a|aac|weba|webm)$/i;
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   async function preview() {
     setNote("");
     try {
+      if (preferences.alarm_sound === "system") {
+        if (!("Notification" in window)) throw new Error("System notifications are not supported by this browser.");
+        let permission = Notification.permission;
+        if (permission === "default") permission = await Notification.requestPermission();
+        if (permission !== "granted") throw new Error("Allow notifications for Value Time in your device settings to preview the system notification sound.");
+        if (!("serviceWorker" in navigator)) throw new Error("This browser cannot show installed-app notifications. Try the installed Value Time app on your device.");
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification("Value Time sound test", { body: "This uses your device’s default notification sound. The sound and vibration are controlled by your device settings.", icon: "/icon.svg", tag: "value-time-sound-test-" + Date.now(), silent: false, vibrate: [180, 80, 180] });
+        setPreviewing(true);
+        window.setTimeout(() => setPreviewing(false), 1200);
+        return;
+      }
       if (customPath && preferences.alarm_sound === "custom") {
         if (!supabase) throw new Error("Audio storage is unavailable.");
         const { data, error } = await supabase.storage.from("alarm-audio").createSignedUrl(customPath, 300);
@@ -86,13 +99,14 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !supabase) return;
-    if (!file.type.startsWith("audio/")) { setNote("Choose an audio file."); event.target.value = ""; return; }
+    if (!file.type.startsWith("audio/") && !acceptedAudio.test(file.name)) { setNote("Choose an MP3, WAV, OGG, M4A, AAC or other supported audio file."); event.target.value = ""; return; }
     if (file.size > 5 * 1024 * 1024) { setNote("Audio files must be 5 MB or smaller."); event.target.value = ""; return; }
     setUploading(true); setNote("");
     try {
       const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "audio";
       const path = userId + "/" + crypto.randomUUID() + "." + extension;
-      const { error } = await supabase.storage.from("alarm-audio").upload(path, file, { contentType: file.type, upsert: false });
+      const contentType = file.type || ({ mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", m4a: "audio/mp4", aac: "audio/aac", weba: "audio/webm", webm: "audio/webm" } as Record<string, string>)[extension] || "application/octet-stream";
+      const { error } = await supabase.storage.from("alarm-audio").upload(path, file, { contentType, upsert: false });
       if (error) throw error;
       const saved = await supabase.from("user_preferences").upsert({ user_id: userId, custom_alarm_path: path, custom_alarm_name: file.name, alarm_sound: "custom" }, { onConflict: "user_id" });
       if (saved.error) { await supabase.storage.from("alarm-audio").remove([path]); throw saved.error; }
@@ -124,13 +138,14 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
   }
 
   return <section className="alarm-audio-settings">
-    <div className="alarm-audio-heading"><div><span className="settings-kicker">PERSONALISE YOUR ALERT</span><strong>Alarm sound</strong><small>Choose a built-in tone or upload your own audio.</small></div><AudioLines size={21}/></div>
+    <div className="alarm-audio-heading"><div><span className="settings-kicker">PERSONALISE YOUR ALERT</span><strong>Alarm sound</strong><small>Use your device notification sound, a Value Time tone, or your own audio.</small></div><AudioLines size={21}/></div>
     <label className="alarm-select-label">Sound profile
       <select value={preferences.alarm_sound || "classic"} onChange={e => onChange({ alarm_sound: e.target.value })}>
+        <option value="system">Device default notification sound</option>
         {presets.map(p => <option value={p.value} key={p.value}>{p.label}</option>)}
         <option value="custom" disabled={!customPath}>Your custom audio</option>
       </select>
-      <small>{presets.find(p => p.value === (preferences.alarm_sound || "classic"))?.detail || (customPath ? "Your uploaded alarm audio" : "Upload a sound to use it here.")}</small>
+      <small>{preferences.alarm_sound === "system" ? "Uses the notification sound selected by iOS, Android or your browser. Change it in your device notification settings." : presets.find(p => p.value === (preferences.alarm_sound || "classic"))?.detail || (customPath ? "Your uploaded alarm audio" : "Upload a sound to use it here.")}</small>
     </label>
     <div className="alarm-audio-actions">
       <button type="button" className="secondary-button" onClick={preview} disabled={previewing || (preferences.alarm_sound === "custom" && !customPath)}><Play size={14}/> Preview sound</button>
@@ -141,12 +156,12 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
     </label>
     <label className="toggle-row"><span>Repeat alarm pattern</span><input type="checkbox" checked={preferences.alarm_repeat !== false} onChange={e => onChange({ alarm_repeat: e.target.checked })}/></label>
     <div className="custom-alarm-upload">
-      <div><strong>Use your own alarm</strong><small>MP3, WAV, OGG or other browser-supported audio · maximum 5 MB</small></div>
+      <div><strong>My audio</strong><small>Upload MP3, WAV, OGG, M4A or AAC audio · maximum 5 MB. Choose it from the sound profile after upload.</small></div>
       <input ref={fileRef} type="file" accept="audio/*" onChange={upload} hidden/>
       <button type="button" className="secondary-button" onClick={() => fileRef.current?.click()} disabled={uploading}><Upload size={14}/>{uploading ? "Uploading…" : "Upload audio"}</button>
     </div>
     {customPath && <div className="custom-alarm-file"><CheckCircle2 size={15}/><span>{preferences.custom_alarm_name || "Custom alarm audio"}</span><button type="button" aria-label="Remove custom alarm audio" onClick={removeCustom} disabled={uploading}><Trash2 size={14}/></button></div>}
-    <p className="alarm-audio-note">When the app is open, Value Time can play your selected tone or uploaded audio. When the app is in the background, the device and browser control the notification sound; websites cannot force a custom system notification tone.</p>
+    <p className="alarm-audio-note">When Value Time is open, built-in and uploaded sounds can play in the app. For background notifications, the device uses its own notification sound and notification settings. Web apps cannot browse or select a phone’s private ringtone library or force a custom sound for system notifications. Use “Preview sound” to test the selected option.</p>
     {note && <p className="alarm-audio-feedback">{note}</p>}
   </section>;
 }
