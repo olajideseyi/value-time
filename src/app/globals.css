@@ -55,3 +55,30 @@
 /* Google Calendar integration settings */
 .google-calendar-panel{border:1px solid #e5eaf1;background:#fbfcfe;border-radius:10px;padding:18px;margin:16px 0;display:grid;gap:13px}.google-calendar-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.google-calendar-heading h2{font-size:15px;margin:5px 0}.google-calendar-heading p,.google-calendar-note{font-size:10px;color:#8190a3;line-height:1.6;margin:0}.google-calendar-status{white-space:nowrap;border-radius:30px;padding:6px 10px;background:#eef1f5;color:#77869a;font-size:9px;font-weight:800}.google-calendar-status.connected{background:#eaf5ef;color:#438565}.google-calendar-account{display:grid;gap:4px;padding:11px 12px;background:#fff;border:1px solid #edf0f4;border-radius:7px}.google-calendar-account strong{font-size:11px;color:#3d5069}.google-calendar-account span{font-size:9px;color:#8492a4}.google-calendar-actions{display:flex;gap:9px;flex-wrap:wrap}.google-calendar-actions button{min-height:37px}.google-calendar-note{border-top:1px solid #e9edf2;padding-top:11px}
 @media(max-width:650px){.google-calendar-panel{padding:14px}.google-calendar-heading{display:grid}.google-calendar-actions{display:grid;grid-template-columns:1fr}.google-calendar-actions button{width:100%;justify-content:center}}
+
+/* Navigation accessibility: independent sidebar scrolling on desktop and mobile */
+.sidebar{height:100vh;height:100dvh;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#405575 transparent}
+.sidebar::-webkit-scrollbar{width:6px}
+.sidebar::-webkit-scrollbar-thumb{background:#405575;border-radius:8px}
+.sidebar-brand{flex:none;padding-bottom:30px}
+.workspace-label{flex:none}
+.side-nav{display:grid;gap:15px;flex:none;min-height:min-content}
+.nav-group{display:grid;gap:4px;min-width:0}
+.nav-group-label{padding:7px 12px 3px;color:#71839d;font-size:8px;letter-spacing:1.35px;font-weight:800}
+.nav-link{flex:none;min-height:44px;height:auto}
+.sidebar-spacer{display:none}
+.sidebar-tip{flex:none;margin:18px 2px 10px}
+.settings-link{flex:none;margin-top:8px;min-height:52px}
+.sidebar-user{flex:none;min-height:60px}
+@media(max-width:700px){
+  .sidebar{height:100vh;height:100dvh;max-height:100dvh;padding-top:20px;padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  .sidebar-brand{padding-bottom:24px}
+  .side-nav{gap:12px}
+  .sidebar-tip{margin-top:14px}
+}
+@media(max-height:760px) and (min-width:701px){
+  .sidebar{padding-top:18px;padding-bottom:12px}
+  .sidebar-brand{padding-bottom:18px}
+  .sidebar-tip{padding:12px;margin-top:10px;margin-bottom:8px}
+  .sidebar-tip p{font-size:10px;line-height:1.45}
+}
