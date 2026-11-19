@@ -135,18 +135,27 @@ export default function Home() {
     <aside className={mobileNav?"sidebar open":"sidebar"}>
       <div className="brand sidebar-brand"><div className="brand-icon"><Clock3 size={21}/></div><span>value<span className="brand-light">time</span></span><button className="mobile-close" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
       <div className="workspace-label">WORKSPACE</div>
-      <nav className="side-nav">
-        <a className="nav-link active" href="#"><LayoutDashboard size={18}/> Overview</a>
-        <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
-        <a className="nav-link" href="/courses"><BookOpen size={18}/> Courses</a>
-        <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
-        <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
-        <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
-        <a className="nav-link" href="/subtasks"><ClipboardList size={18}/> Subtasks</a>
-        <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
-        <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
-        <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
-        <a className="nav-link" href="/notes"><FileText size={18}/> Notes & resources</a>
+      <nav className="side-nav" aria-label="Main navigation">
+        <a className="nav-link active" href="/"><LayoutDashboard size={18}/> Overview</a>
+        <div className="nav-group">
+          <span className="nav-group-label">STUDY & SCHEDULE</span>
+          <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
+          <a className="nav-link" href="/courses"><BookOpen size={18}/> Courses</a>
+          <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
+          <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
+        </div>
+        <div className="nav-group">
+          <span className="nav-group-label">TASKS & PRODUCTIVITY</span>
+          <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
+          <a className="nav-link" href="/subtasks"><ClipboardList size={18}/> Subtasks</a>
+          <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
+          <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
+          <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
+        </div>
+        <div className="nav-group">
+          <span className="nav-group-label">YOUR RESOURCES</span>
+          <a className="nav-link" href="/notes"><FileText size={18}/> Notes & resources</a>
+        </div>
       </nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-tip"><div className="tip-icon"><Target size={18}/></div><strong>Make today count.</strong><p>Small steps, done consistently, make a remarkable difference.</p></div>
