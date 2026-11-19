@@ -8,6 +8,11 @@ SUPABASE_URL = "https://emcspruiboxkixcyokka.supabase.co"
 VAPID_PUBLIC_KEY = "BGaE34rSjkHec2lx_Xewd7ZDNalvLzRPtj_59t8-8uxoFII4yApwZH15muyBazGqN9sUtEUkQg-DPfDdlbs5SoQ"
 VAPID_SUBJECT = "mailto:noreply@sescoconcept.name.ng"
 
+[previews.vars]
+SUPABASE_URL = "https://emcspruiboxkixcyokka.supabase.co"
+VAPID_PUBLIC_KEY = "BGaE34rSjkHec2lx_Xewd7ZDNalvLzRPtj_59t8-8uxoFII4yApwZH15muyBazGqN9sUtEUkQg-DPfDdlbs5SoQ"
+VAPID_SUBJECT = "mailto:noreply@sescoconcept.name.ng"
+
 [triggers]
 crons = ["* * * * *"]
 

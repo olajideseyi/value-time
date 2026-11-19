@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
+import { NotificationCenter } from "@/components/notification-center";
 
 type Task = { id: string; title: string; status: string; priority: string; due_at: string | null };
 type Schedule = { id: string; title: string; starts_at: string; ends_at: string; location: string | null; activity_type: string; recurrence_type?: string; recurrence_days?: number[]; recurrence_until?: string | null; lecturer_name?: string | null };
@@ -134,18 +135,27 @@ export default function Home() {
     <aside className={mobileNav?"sidebar open":"sidebar"}>
       <div className="brand sidebar-brand"><div className="brand-icon"><Clock3 size={21}/></div><span>value<span className="brand-light">time</span></span><button className="mobile-close" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
       <div className="workspace-label">WORKSPACE</div>
-      <nav className="side-nav">
-        <a className="nav-link active" href="#"><LayoutDashboard size={18}/> Overview</a>
-        <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
-        <a className="nav-link" href="/courses"><BookOpen size={18}/> Courses</a>
-        <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
-        <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
-        <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
-        <a className="nav-link" href="/subtasks"><ClipboardList size={18}/> Subtasks</a>
-        <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
-        <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
-        <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
-        <a className="nav-link" href="/notes"><FileText size={18}/> Notes & resources</a>
+      <nav className="side-nav" aria-label="Main navigation">
+        <a className="nav-link active" href="/"><LayoutDashboard size={18}/> Overview</a>
+        <div className="nav-group">
+          <span className="nav-group-label">STUDY & SCHEDULE</span>
+          <a className="nav-link" href="/timetable"><CalendarDays size={18}/> Timetable</a>
+          <a className="nav-link" href="/courses"><BookOpen size={18}/> Courses</a>
+          <a className="nav-link" href="/exams"><CalendarDays size={18}/> Exams & assessments</a>
+          <a className="nav-link" href="/assignments"><ClipboardList size={18}/> Assignments</a>
+        </div>
+        <div className="nav-group">
+          <span className="nav-group-label">TASKS & PRODUCTIVITY</span>
+          <a className="nav-link" href="/tasks"><CheckCircle2 size={18}/> My tasks</a>
+          <a className="nav-link" href="/subtasks"><ClipboardList size={18}/> Subtasks</a>
+          <a className="nav-link" href="/reminders"><AlarmClock size={18}/> Alarms & reminders</a>
+          <a className="nav-link" href="/focus"><Target size={18}/> Focus & insights</a>
+          <a className="nav-link" href="/planner"><CalendarDays size={18}/> Daily planner</a>
+        </div>
+        <div className="nav-group">
+          <span className="nav-group-label">YOUR RESOURCES</span>
+          <a className="nav-link" href="/notes"><FileText size={18}/> Notes & resources</a>
+        </div>
       </nav>
       <div className="sidebar-spacer"/>
       <div className="sidebar-tip"><div className="tip-icon"><Target size={18}/></div><strong>Make today count.</strong><p>Small steps, done consistently, make a remarkable difference.</p></div>
@@ -154,7 +164,7 @@ export default function Home() {
     </aside>
     {mobileNav && <button className="nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)}/>}
     <section className="main-area">
-      <header className="topbar"><button className="mobile-menu icon-button" onClick={()=>setMobileNav(true)}><Menu size={20}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div className="topbar-actions"><span className="today-chip"><CalendarDays size={15}/>{todayText}</span><a className="notification-button" href="/reminders" aria-label="Open reminders"><Bell size={18}/><i/></a><div className="top-avatar">{displayName.slice(0,1).toUpperCase()}</div></div></header>
+      <header className="topbar"><button className="mobile-menu icon-button" onClick={()=>setMobileNav(true)}><Menu size={20}/></button><div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div className="topbar-actions"><span className="today-chip"><CalendarDays size={15}/>{todayText}</span><a className="notification-button" href="#notifications" aria-label="Open notification centre"><Bell size={18}/><i/></a><div className="top-avatar">{displayName.slice(0,1).toUpperCase()}</div></div></header>
       <div className="content-wrap">
         <div className="welcome-row"><div><span className="eyebrow muted">YOUR PERSONAL OVERVIEW</span><h1>Good day, {displayName}<span className="wave">✳</span></h1><p>Here's what's happening with your time today.</p></div><div className="date-block"><span>{new Intl.DateTimeFormat("en-NG",{month:"short"}).format(new Date()).toUpperCase()}</span><strong>{new Date().getDate()}</strong><small>{new Intl.DateTimeFormat("en-NG",{weekday:"long"}).format(new Date())}</small></div></div>
         <div className="stat-grid">
@@ -165,6 +175,7 @@ export default function Home() {
         </div>
         {notice && <div className="inline-notice">{notice}<button onClick={()=>setNotice("")}><X size={15}/></button></div>}
         <div className="dashboard-grid">
+          <NotificationCenter />
           <section className="panel schedule-panel" id="timetable"><div className="panel-heading"><div><span className="eyebrow muted">YOUR DAY AT A GLANCE</span><h2>Today's timetable</h2></div><a href="/timetable">View timetable <ArrowRight size={14}/></a></div>
             {schedule.length ? <div className="timeline">{schedule.map(item=><div className="timeline-item" key={item.id}><div className="timeline-time">{timeLabel.format(new Date(item.starts_at))}</div><div className="timeline-track"><i/></div><div className="timeline-detail"><strong>{item.title}</strong><span>{item.location || item.activity_type.replace("_"," ")}{item.lecturer_name?" · "+item.lecturer_name:""}</span></div><span className="duration">{Math.max(1,Math.round((new Date(item.ends_at).getTime()-new Date(item.starts_at).getTime())/60000))} min</span></div>)}</div> : <div className="empty-state"><div className="empty-icon"><CalendarDays size={22}/></div><strong>Your day is still open.</strong><span>Add a class or activity to your timetable.</span></div>}
           </section>
