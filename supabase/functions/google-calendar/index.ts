@@ -346,6 +346,7 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Google Calendar setup is not complete yet. Add the Google OAuth credentials and Value Time app URL in Supabase Function Secrets." }, 503, corsHeaders);
       }
       await encryptionKey();
+      await db.from("google_calendar_oauth_states").delete().lt("expires_at", new Date().toISOString());
       const state = b64url(crypto.getRandomValues(new Uint8Array(32)));
       const { error } = await db.from("google_calendar_oauth_states").insert({
         state_hash: await sha256(state),
