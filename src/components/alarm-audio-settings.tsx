@@ -14,10 +14,11 @@ const presets = [
   { value: "urgent", label: "Urgent", detail: "A stronger repeating pattern" },
 ];
 
-function playPreset(name: string, volume: number) {
+async function playPreset(name: string, volume: number) {
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContextClass) throw new Error("Audio preview is not supported by this browser.");
   const context = new AudioContextClass();
+  if (context.state === "suspended") await context.resume();
   const patterns: Record<string, number[]> = {
     classic: [880, 988, 1174], chime: [660, 880, 1046, 1320],
     pulse: [880, 440, 880], digital: [1046, 784, 1046, 1568],
@@ -81,7 +82,7 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
         setPreviewing(true);
         return;
       }
-      playPreset(preferences.alarm_sound || "classic", volume);
+      await playPreset(preferences.alarm_sound || "classic", volume);
       setPreviewing(true);
       window.setTimeout(() => setPreviewing(false), 1700);
     } catch (error) {
