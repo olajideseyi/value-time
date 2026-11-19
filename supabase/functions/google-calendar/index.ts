@@ -74,12 +74,34 @@ function appRedirect(result: string, detail?: string) {
   return Response.redirect(target.toString(), 303);
 }
 function googleEventBody(row: Record<string, any>) {
-  return {
+  const body: Record<string, any> = {
     summary: row.title,
     description: row.description ?? "",
     location: row.location ?? "",
     start: { dateTime: new Date(row.starts_at).toISOString(), timeZone: row.timezone || "Africa/Lagos" },
     end: { dateTime: new Date(row.ends_at).toISOString(), timeZone: row.timezone || "Africa/Lagos" },
+  };
+  if (row.recurrence_type === "weekly") {
+    const dayCodes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+    const days = Array.isArray(row.recurrence_days) && row.recurrence_days.length
+      ? row.recurrence_days.map((day: number) => dayCodes[Number(day)]).filter(Boolean)
+      : [dayCodes[new Date(row.starts_at).getDay()]];
+    let rule = "RRULE:FREQ=WEEKLY;BYDAY=" + days.join(",");
+    if (row.recurrence_until) rule += ";UNTIL=" + row.recurrence_until.replaceAll("-", "") + "T235959Z";
+    body.recurrence = [rule];
+  }
+  return body;
+}
+function parseGoogleRecurrence(rules: string[] | undefined) {
+  const weekly = (rules ?? []).find((rule) => rule.startsWith("RRULE:") && rule.includes("FREQ=WEEKLY"));
+  if (!weekly) return { recurrence_type: "none", recurrence_days: [], recurrence_until: null };
+  const days = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const byDay = weekly.match(/(?:^|;)BYDAY=([^;]+)/)?.[1];
+  const until = weekly.match(/(?:^|;)UNTIL=(\\d{4})(\\d{2})(\\d{2})/) ;
+  return {
+    recurrence_type: "weekly",
+    recurrence_days: byDay ? byDay.split(",").map((day) => days.indexOf(day)).filter((day) => day >= 0) : [],
+    recurrence_until: until ? until[1] + "-" + until[2] + "-" + until[3] : null,
   };
 }
 async function googleRequest(url: string, accessToken: string, init: RequestInit = {}) {
@@ -130,7 +152,7 @@ async function syncCalendar(db: ReturnType<typeof adminClient>, userId: string, 
     const url = new URL("https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(connection.calendar_id || "primary") + "/events");
     url.searchParams.set("timeMin", timeMin);
     url.searchParams.set("timeMax", timeMax);
-    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("singleEvents", "false");
     url.searchParams.set("showDeleted", "true");
     url.searchParams.set("maxResults", "2500");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
@@ -163,9 +185,8 @@ async function syncCalendar(db: ReturnType<typeof adminClient>, userId: string, 
           timezone: event.start?.timeZone || "Africa/Lagos",
           location: event.location || null,
           meeting_url: event.hangoutLink || event.htmlLink || null,
-          recurrence_type: "none",
-          recurrence_days: [],
-          recurrence_until: null,
+          ...parseGoogleRecurrence(event.recurrence),
+
           is_active: true,
           google_calendar_event_id: event.id,
           google_calendar_event_etag: event.etag || null,
