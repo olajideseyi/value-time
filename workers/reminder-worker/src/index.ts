@@ -190,16 +190,70 @@ async function processRecurringTasks(env:Env){
  }
 }
 
+
+async function processUpcomingItemReminders(env:Env){
+ const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
+ const now=new Date(),horizon=new Date(now.getTime()+14*86400000),nowIso=now.toISOString(),horizonIso=horizon.toISOString();
+ const getRows=async(table:string,params:Record<string,string>)=>{
+  const url=new URL(base+"/rest/v1/"+table);url.searchParams.set("select","*");url.searchParams.set("limit","1000");
+  for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
+  const response=await fetch(url,{headers});if(!response.ok)throw new Error("Upcoming "+table+" lookup failed: HTTP "+response.status+" "+(await response.text()).slice(0,300));
+  return await response.json() as any[];
+ };
+ const [schedules,tasks,assignments,exams]=await Promise.all([
+  getRows("schedule_entries",{is_active:"eq.true",recurrence_type:"neq.weekly",starts_at:"gte."+nowIso,"and":"(starts_at.lte."+horizonIso+")"}),
+  getRows("tasks",{due_at:"gte."+nowIso,"and":"(due_at.lte."+horizonIso+")",status:"not.in.(completed,cancelled)"}),
+  getRows("assignments",{due_at:"gte."+nowIso,"and":"(due_at.lte."+horizonIso+")",status:"not.in.(submitted,completed)"}),
+  getRows("examinations",{starts_at:"gte."+nowIso,"and":"(starts_at.lte."+horizonIso+")",status:"eq.scheduled"})
+ ]);
+ const events:any[]=[
+  ...schedules.map(x=>({row:x,type:"schedule",time:x.starts_at,offsets:Array.isArray(x.reminder_minutes)&&x.reminder_minutes.length?x.reminder_minutes:[30,10],titleSuffix:" starts soon",message:(x.lecturer_name?"Lecturer: "+x.lecturer_name+". ":"")+(x.location||"Your scheduled activity is coming up.")})),
+  ...tasks.map(x=>({row:x,type:"task",time:x.due_at,offsets:[1440,60],titleSuffix:" deadline approaching",message:x.description||"Your task deadline is approaching."})),
+  ...assignments.map(x=>({row:x,type:"assignment",time:x.due_at,offsets:[1440,60],titleSuffix:" due soon",message:x.description||"Your assignment deadline is approaching."})),
+  ...exams.map(x=>({row:x,type:"exam",time:x.starts_at,offsets:[1440,60,15],titleSuffix:" is coming up",message:x.location?"Venue: "+x.location:"Your examination or assessment is approaching."}))
+ ];
+ if(!events.length)return;
+ const userIds=[...new Set(events.map(x=>x.row.user_id).filter(Boolean))];
+ const [preferences,subscriptions]=await Promise.all([
+  getRows("user_preferences",{user_id:"in.("+userIds.join(",")+")"}),
+  getRows("push_subscriptions",{user_id:"in.("+userIds.join(",")+")"})
+ ]);
+ const prefByUser=new Map(preferences.map(x=>[x.user_id,x]));
+ const pushUsers=new Set(subscriptions.map(x=>x.user_id));
+ const inserts:any[]=[];
+ for(const event of events){
+  const row=event.row,pref=prefByUser.get(row.user_id)||{};
+  if(!row.user_id||!row.id||!event.time)continue;
+  const occurrence=new Date(event.time);if(!Number.isFinite(occurrence.getTime()))continue;
+  for(const rawOffset of event.offsets){
+   const mins=Math.max(0,Number(rawOffset));if(!Number.isFinite(mins))continue;
+   const dueAt=new Date(occurrence.getTime()-mins*60000);if(dueAt<=now||dueAt>horizon)continue;
+   const channels=["in_app",...(pref.email_notifications_enabled===false?[]:["email"]),...(pref.push_enabled===false||!pushUsers.has(row.user_id)?[]:["push"])] as const;
+   for(const channel of channels){
+    inserts.push({user_id:row.user_id,target_type:event.type,target_id:row.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:mins,title:String(row.title||"Upcoming activity")+event.titleSuffix,message:event.message,channel,due_at:dueAt.toISOString(),status:"pending"});
+   }
+  }
+ }
+ for(let i=0;i<inserts.length;i+=500){
+  const url=new URL(base+"/rest/v1/reminders");url.searchParams.set("on_conflict","user_id,target_id,occurrence_starts_at,reminder_offset_minutes,channel");
+  const response=await fetch(url,{method:"POST",headers:{...headers,Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(inserts.slice(i,i+500))});
+  if(!response.ok)throw new Error("Could not queue upcoming activity reminders: HTTP "+response.status+" "+(await response.text()).slice(0,400));
+ }
+}
+
 async function processReminders(env:Env){
  const base=env.SUPABASE_URL.replace(/\/$/,"");const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
- const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(email,push)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
+ const q=new URL(base+"/rest/v1/reminders");q.searchParams.set("select","id,user_id,title,message,attempts,channel");q.searchParams.set("status","eq.pending");q.searchParams.set("channel","in.(email,push,in_app)");q.searchParams.set("due_at","lte."+new Date().toISOString());q.searchParams.set("limit","50");
  const response=await fetch(q,{headers});if(!response.ok)throw new Error("Supabase reminder query failed: "+response.status+" "+await response.text());const reminders=await response.json() as DueReminder[];
  for(const reminder of reminders){
   const claimUrl=new URL(base+"/rest/v1/reminders");claimUrl.searchParams.set("id","eq."+reminder.id);claimUrl.searchParams.set("status","eq.pending");
   const claim=await fetch(claimUrl,{method:"PATCH",headers:{...headers,Prefer:"return=representation"},body:JSON.stringify({status:"processing",attempts:reminder.attempts+1})});if(!claim.ok)continue;const claimed=await claim.json() as unknown[];if(!claimed.length)continue;
   let status:"sent"|"failed"="failed";let providerId:string|null=null;let errorMessage:string|null=null;
   try{
-   if(reminder.channel==="email"){
+   if(reminder.channel==="in_app"){
+    providerId="in-app:"+reminder.id;
+   }else if(reminder.channel==="email"){
     const prefUrl=new URL(base+"/rest/v1/user_preferences");prefUrl.searchParams.set("select","email_notifications_enabled");prefUrl.searchParams.set("user_id","eq."+reminder.user_id);const prefResponse=await fetch(prefUrl,{headers});const prefRows=await prefResponse.json() as {email_notifications_enabled:boolean}[];if(prefRows[0]?.email_notifications_enabled===false)throw new Error("Email reminders are disabled in account preferences.");const ur=await fetch(base+"/auth/v1/admin/users/"+reminder.user_id,{headers});if(!ur.ok)throw new Error("Could not retrieve account email.");const user=await ur.json() as {email?:string};if(!user.email)throw new Error("No email address is registered for this account.");
     const esc=(s:string)=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]!));
     const body=esc(reminder.message||"Your scheduled reminder is due.").replace(/\n/g,"<br/>");
@@ -279,6 +333,7 @@ export default {async scheduled(_event:WorkerScheduledController,env:Env,ctx:Wor
  if(config.missing.length){console.error("Worker configuration invalid: required settings are missing",config.missing);return;}
  ctx.waitUntil(Promise.all([
   runScheduledJob("recurring_schedule_reminders",()=>processRecurringScheduleReminders(env)),
+  runScheduledJob("upcoming_item_reminders",()=>processUpcomingItemReminders(env)),
   runScheduledJob("recurring_tasks",()=>processRecurringTasks(env)),
   runScheduledJob("pending_reminders",()=>processReminders(env)),
   runScheduledJob("daily_summaries",()=>processDailySummaries(env))
