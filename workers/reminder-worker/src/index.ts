@@ -1,7 +1,7 @@
 export interface Env { SUPABASE_URL:string; SUPABASE_SERVICE_ROLE_KEY:string; TELEGRAM_BOT_TOKEN?:string; RESEND_API_KEY?:string; EMAIL_FROM?:string; VAPID_PUBLIC_KEY?:string; VAPID_PRIVATE_JWK?:string; VAPID_SUBJECT?:string; }
 interface WorkerScheduledController { cron:string; scheduledTime:number; }
 interface WorkerExecutionContext { waitUntil(promise:Promise<unknown>):void; passThroughOnException():void; }
-type DueReminder={id:string;user_id:string;title:string;message:string|null;attempts:number;channel:"telegram"|"email"|"push"};
+type DueReminder={id:string;user_id:string;title:string;message:string|null;attempts:number;channel:"telegram"|"email"|"push"|"in_app"};
 type TelegramConnection={telegram_chat_id:string|null;notifications_enabled:boolean};
 async function sendEmail(env:Env,to:string,subject:string,html:string){
  if(!env.RESEND_API_KEY||!env.EMAIL_FROM)throw new Error("Email delivery is not configured. Add RESEND_API_KEY and EMAIL_FROM to the reminder Worker secrets.");
@@ -202,7 +202,7 @@ async function processUpcomingItemReminders(env:Env){
   return await response.json() as any[];
  };
  const [schedules,tasks,assignments,exams]=await Promise.all([
-  getRows("schedule_entries",{is_active:"eq.true",recurrence_type:"neq.weekly",starts_at:"gte."+nowIso,"and":"(starts_at.lte."+horizonIso+")"}),
+  getRows("schedule_entries",{is_active:"eq.true",starts_at:"gte."+nowIso,"and":"(starts_at.lte."+horizonIso+")"}).then(rows=>rows.filter(x=>x.recurrence_type!=="weekly")),
   getRows("tasks",{due_at:"gte."+nowIso,"and":"(due_at.lte."+horizonIso+")",status:"not.in.(completed,cancelled)"}),
   getRows("assignments",{due_at:"gte."+nowIso,"and":"(due_at.lte."+horizonIso+")",status:"not.in.(submitted,completed)"}),
   getRows("examinations",{starts_at:"gte."+nowIso,"and":"(starts_at.lte."+horizonIso+")",status:"eq.scheduled"})
@@ -266,7 +266,7 @@ async function processReminders(env:Env){
     const tr=await fetch("https://api.telegram.org/bot"+env.TELEGRAM_BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:c.telegram_chat_id,text:"🔔 "+reminder.title+"\n\n"+(reminder.message||"Your scheduled reminder is due."),disable_web_page_preview:true})});const td=await tr.json() as {ok?:boolean;description?:string;result?:{message_id?:number}};if(!tr.ok||!td.ok)throw new Error(td.description||"Telegram returned HTTP "+tr.status);providerId=String(td.result?.message_id??"");
    }status="sent";
   }catch(e){errorMessage=e instanceof Error?e.message:"Notification delivery failed.";}
-  await fetch(claimUrl,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({status,sent_at:status==="sent"?new Date().toISOString():null,last_error:errorMessage})});
+  await fetch(claimUrl,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({status:status==="failed"&&reminder.attempts+1<3?"pending":status,due_at:status==="failed"&&reminder.attempts+1<3?new Date(Date.now()+5*60000).toISOString():undefined,sent_at:status==="sent"?new Date().toISOString():null,last_error:errorMessage})});
   await fetch(base+"/rest/v1/notification_logs",{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({user_id:reminder.user_id,reminder_id:reminder.id,channel:reminder.channel,status,provider_message_id:providerId,error_message:errorMessage})});
  }
 }
