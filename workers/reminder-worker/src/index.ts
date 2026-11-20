@@ -211,7 +211,7 @@ async function processUpcomingItemReminders(env:Env){
   ...schedules.map(x=>({row:x,type:"schedule",time:x.starts_at,offsets:Array.isArray(x.reminder_minutes)&&x.reminder_minutes.length?x.reminder_minutes:[30,10],titleSuffix:" starts soon",message:(x.lecturer_name?"Lecturer: "+x.lecturer_name+". ":"")+(x.location||"Your scheduled activity is coming up.")})),
   ...tasks.map(x=>({row:x,type:"task",time:x.due_at,offsets:[1440,60],titleSuffix:" deadline approaching",message:x.description||"Your task deadline is approaching."})),
   ...assignments.map(x=>({row:x,type:"assignment",time:x.due_at,offsets:[1440,60],titleSuffix:" due soon",message:x.description||"Your assignment deadline is approaching."})),
-  ...exams.map(x=>({row:x,type:"exam",time:x.starts_at,offsets:[1440,60,15],titleSuffix:" is coming up",message:x.location?"Venue: "+x.location:"Your examination or assessment is approaching."}))
+  ...exams.map(x=>({row:x,type:"custom",time:x.starts_at,offsets:[1440,60,15],titleSuffix:" is coming up",message:x.location?"Venue: "+x.location:"Your examination or assessment is approaching."}))
  ];
  if(!events.length)return;
  const userIds=[...new Set(events.map(x=>x.row.user_id).filter(Boolean))];
