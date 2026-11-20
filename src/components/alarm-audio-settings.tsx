@@ -64,7 +64,8 @@ export function AlarmAudioSettings({ userId, preferences, onChange }: {
         if (permission !== "granted") throw new Error("Allow notifications for Value Time in your device settings to preview the system notification sound.");
         if (!("serviceWorker" in navigator)) throw new Error("This browser cannot show installed-app notifications. Try the installed Value Time app on your device.");
         const registration = await navigator.serviceWorker.ready;
-        const notificationOptions = { body: "This uses your device’s default notification sound. The sound and vibration are controlled by your device settings.", icon: "/icon.svg", tag: "value-time-sound-test-" + Date.now(), silent: false, vibrate: [180, 80, 180] } as NotificationOptions & { vibrate: number[] };\n        await registration.showNotification("Value Time sound test", notificationOptions);
+        const notificationOptions = { body: "This uses your device’s default notification sound. The sound and vibration are controlled by your device settings.", icon: "/icon.svg", tag: "value-time-sound-test-" + Date.now(), silent: false, vibrate: [180, 80, 180] } as NotificationOptions & { vibrate: number[] };
+        await registration.showNotification("Value Time sound test", notificationOptions);
         setPreviewing(true);
         window.setTimeout(() => setPreviewing(false), 1200);
         return;
