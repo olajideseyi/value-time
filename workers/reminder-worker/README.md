@@ -8,7 +8,7 @@ This is a separate scheduled Worker from the main Next.js application Worker.
 
 1. In Cloudflare Workers & Pages, create a Worker connected to this GitHub repository.
 2. Set the repository root directory to `workers/reminder-worker`.
-3. Use `npx wrangler deploy --config workers/reminder-worker/wrangler.toml` as the deploy command. This explicit config path prevents the main app's root `wrangler.jsonc` from being selected. The `wrangler.toml` file already defines the Worker entry point and a once-per-minute Cron Trigger.
+3. Use `npx wrangler deploy --config wrangler.toml` as the deploy command (the command runs from that configured root directory). The `wrangler.toml` file already defines the Worker entry point and a once-per-minute Cron Trigger.
 4. In the Worker settings, add the secrets and variables below.
 5. Deploy and check the Worker's Cron Trigger and invocation logs.
 
