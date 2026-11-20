@@ -135,12 +135,15 @@ async function processRecurringScheduleReminders(env:Env){
    if(!weekdays.includes(weekday)||entry.recurrence_until&&date>entry.recurrence_until)continue;
    const occurrence=localDateTimeToUtc(date,time.hour,time.minute,tz);
    for(const mins of reminderMinutes){
-    const dueAt=new Date(occurrence.getTime()-Number(mins)*60000);
-    if(dueAt<=now||dueAt>horizon)continue;
+    const scheduledDueAt=new Date(occurrence.getTime()-Number(mins)*60000);
+    if(occurrence<=now||occurrence>horizon)continue;
+    const catchUp=scheduledDueAt<=now;
+    const reminderOffset=catchUp?0:Number(mins);
+    const dueAt=catchUp?now:scheduledDueAt;
     const message=(entry.lecturer_name?"Lecturer: "+entry.lecturer_name+". ":"")+(entry.location||"Your scheduled activity is coming up.");
     for(const channel of (["in_app",...(emailEnabled.get(entry.user_id)===false?[]:["email"]),...(pushEnabled.get(entry.user_id)===false||!pushReady.has(entry.user_id)?[]:["push"])] as const)){
-     const key=entry.id+"|"+occurrence.toISOString()+"|"+mins+"|"+channel;if(keys.has(key))continue;
-     keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:Number(mins),title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
+     const key=entry.id+"|"+occurrence.toISOString()+"|"+reminderOffset+"|"+channel;if(keys.has(key))continue;
+     keys.add(key);inserts.push({user_id:entry.user_id,target_type:"schedule",target_id:entry.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:reminderOffset,title:entry.title+" starts soon",message,channel,due_at:dueAt.toISOString(),status:"pending"});
     }
    }
   }
@@ -192,7 +195,7 @@ async function processRecurringTasks(env:Env){
 
 
 async function processUpcomingItemReminders(env:Env){
- const base=env.SUPABASE_URL.replace(/\\/$/,"");
+ const base=env.SUPABASE_URL.replace(/\/$/,"");
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json"};
  const now=new Date(),horizon=new Date(now.getTime()+14*86400000),nowIso=now.toISOString(),horizonIso=horizon.toISOString();
  const getRows=async(table:string,params:Record<string,string>)=>{
@@ -228,10 +231,14 @@ async function processUpcomingItemReminders(env:Env){
   const occurrence=new Date(event.time);if(!Number.isFinite(occurrence.getTime()))continue;
   for(const rawOffset of event.offsets){
    const mins=Math.max(0,Number(rawOffset));if(!Number.isFinite(mins))continue;
-   const dueAt=new Date(occurrence.getTime()-mins*60000);if(dueAt<=now||dueAt>horizon)continue;
+   const scheduledDueAt=new Date(occurrence.getTime()-mins*60000);
+   if(occurrence<=now||occurrence>horizon)continue;
+   const catchUp=scheduledDueAt<=now;
+   const reminderOffset=catchUp?0:mins;
+   const dueAt=catchUp?now:scheduledDueAt;
    const channels=["in_app",...(pref.email_notifications_enabled===false?[]:["email"]),...(pref.push_enabled===false||!pushUsers.has(row.user_id)?[]:["push"])] as const;
    for(const channel of channels){
-    inserts.push({user_id:row.user_id,target_type:event.type,target_id:row.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:mins,title:String(row.title||"Upcoming activity")+event.titleSuffix,message:event.message,channel,due_at:dueAt.toISOString(),status:"pending"});
+    inserts.push({user_id:row.user_id,target_type:event.type,target_id:row.id,occurrence_starts_at:occurrence.toISOString(),reminder_offset_minutes:reminderOffset,title:String(row.title||"Upcoming activity")+event.titleSuffix,message:event.message,channel,due_at:dueAt.toISOString(),status:"pending"});
    }
   }
  }
